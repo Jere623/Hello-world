@@ -1,3 +1,3914 @@
-import pandas as pd
-import numpy as np
+
+
+##SCRIPT National
+
+
+
+########### les packages #######
+library(magrittr)
+library(dplyr)
+library(tidyverse)
+library(haven)
+
+########### Chargement base  #######
+
+rm(list=ls())
+
+####PBS RA 2010 Coefficient 2017
+PBS17 <- readRDS("~/CERISE/03-Espace-de-Diffusion/030_Structures_exploitations/3020_Recensements/RA_2010/PBS_RA2010_COEF2017.rds")
+
+#### Base INOSYS 2010
+DONNEES_BASE <- readRDS("~/CERISE/01-Espace-de-Partage/SSP/CEP/INOSYS/Inosys_RA2010_Metropole.rds")%>%
+  select(-pb01,	-pb02,	-pb03,	-pb04,	-pb05,	-pb06,	-pb07,	-pb08,	-pb10,	-pb11,	-pb12,	-pb13,	-pb14,	-pb15,	-pb16,	-pb18,	-pb19,	-pb20,	-pb21,	-pb22,	-pb23,	-pb24,	-pb25,	-pb26,	-pb27,	-pb28,	-pb28,	-pb30,	-pb31,	-pb32,	-pb33,	-pb34,	-pb35,	-pb36,	-pb37,	-pb39,	-pb40,	-pb41,	-pb42,	-pb43,-pb45 ,	-pb46,	-pb46,	-pb47,	-pb48,	-pb49,	-pb50,	-pb53a,	-pb53b,	-pb54,	-pb55,	-pb57,	-pb58,	-pb60,	-pb62,	-pb64,	-pb65,-pb66,	-pb67,	-pb68,	-pb69,	-pb70,	-pb71,	-pb72,	-pb73,	-pb74,	-pb75,	-pb76e,	-pb77e,	-pb78e,	-pb79e,	-pb80,	-pb81,	-pb63,	-GL,	-p151,	-p15,	-p16,	-FCP1,	-FCP4,	-p17,	-p1,	-p2,	-p3,	-pb53,	-p4,	-p45,	-p46,	-p51e,	-p52e,	-p5e,	-cpbs07e,	-pbstot_07e,	-ote62e,	-pb76f,	-pb77f,	-pb78f,	-pb79f,	-p51f,	-p52f,	-p5f,	-cpbs07f,	-pbstot_07f,	-otefdd,	-otefda,	-ote64f)
+
+DONNEES_BASE <-DONNEES_BASE%>%rename("ID_DOSSIER"="@_ID_DOSSIER")
+DONNEES_BASE$ID_DOSSIER<-as.character(DONNEES_BASE$ID_DOSSIER)
+
+
+DONNEES_BASE <-DONNEES_BASE%>%left_join(PBS17,by="ID_DOSSIER")
+
+
+DONNEES_BASE <- as_tibble(DONNEES_BASE)
+class(DONNEES_BASE)
+
+
+### creation de DONNEES_BASE qui ne contient que les exploitations professionnelles et repechées####
+
+DONNEES_BASE<- subset(DONNEES_BASE, (PBSTOT_COEF17>=25000 | (PBSTOT_COEF17<25000 & UTATOT>=500)))
+
+
+######## Création des variables ######
+
+####Transformation des valeurs numériques manquantes par des zéros 
+
+DONNEES_BASE <- mutate_if (DONNEES_BASE, is.numeric, ~replace(., is.na(.), 0))
+
+
+###Equipement de l'exploitation(stockage de fruits et légumes 
+#en chambres froides)
+
+DONNEES_BASE$EQUIPVAL_stockage =  (DONNEES_BASE$EQUIPVAL_301 +
+                                     DONNEES_BASE$EQUIPVAL_302)
+
+attr(DONNEES_BASE [["EQUIPVAL_stockage"]],"label") <- 
+  "Equipement de l'exploitation"
+
+###Calcul du total UGB
+
+DONNEES_BASE$UGBAGTOT = (DONNEES_BASE$UGBAG_BOV + DONNEES_BASE$UGBAG_CAP +
+                           DONNEES_BASE$UGBAG_EQU + DONNEES_BASE$UGBAG_LAP +
+                           DONNEES_BASE$UGBAG_OVI +
+                           DONNEES_BASE$UGBAG_POR + DONNEES_BASE$UGBAG_VOL)
+
+attr(DONNEES_BASE [["UGBAGTOT"]],"label") <- "Total UGB"
+
+###Calcul de la somme de la SAU fruits y compris girofle et pépiniére viticole
+
+DONNEES_BASE$CULTSUR_pépi <- (DONNEES_BASE$CULTSUR_0958 +
+                                DONNEES_BASE$CULTSUR_0807 +
+                                DONNEES_BASE$CULTSUR_0808 +
+                                DONNEES_BASE$CULTSUR_0700)
+
+attr(DONNEES_BASE [["CULTSUR_pépi"]],"label") <- 
+  "somme de la SAU fruits y compris girofle et pépiniére viticole"
+
+####Total des ares parcelles sous serre ou sous abri-haut légumes frais, 
+#fraises et melon
+
+DONNEES_BASE$CULTSUR_LPC<-ifelse(DONNEES_BASE$DEVSUR_compteur <= 5 &
+                                   ((DONNEES_BASE$CULTSUR_0506 +
+                                       DONNEES_BASE$CULTSUR_0507)==0),DONNEES_BASE$CULTSUR_0504,0)
+
+attr(DONNEES_BASE [["CULTSUR_LPC"]],"label") <- 
+  "légumes frais, fraises et melon"
+
+###Total ares céréales et oléginaux, protéaginaux et plantes é fibres
+
+DONNEES_BASE$CULTSUR_GC <- (DONNEES_BASE$CULTSUR_0100 + 
+                              DONNEES_BASE$CULTSUR_0200 + 
+                              DONNEES_BASE$CULTSUR_0300 +
+                              DONNEES_BASE$CULTSUR_0600 +
+                              DONNEES_BASE$CULTSUR_0501 +
+                              DONNEES_BASE$CULTSUR_LPC) 
+
+attr(DONNEES_BASE [["CULTSUR_GC"]],"label") <- 
+  "oléginaux, protéaginaux et plantes é fibres"
+
+
+###Cultures en pommes de terre
+
+DONNEES_BASE$CULTSUR_0601_C [DONNEES_BASE$CULTSUR_0601 > 0] <- 1
+DONNEES_BASE$CULTSUR_0602_C [DONNEES_BASE$CULTSUR_0602> 0] <- 1
+
+###Total ares fourrages ou surfaces toujours en herbe
+
+DONNEES_BASE$CULTSUR_fourrage <- (DONNEES_BASE$CULTSUR_0401 +
+                                    DONNEES_BASE$CULTSUR_0402 +
+                                    DONNEES_BASE$CULTSUR_0403 +
+                                    DONNEES_BASE$CULTSUR_0404)
+
+attr(DONNEES_BASE [["CULTSUR_fourrage"]],"label") <-
+  "fourrages ou surfaces toujours en herbe"
+
+###Total ares prairies artificielles, prairies semées depuis septembre 2004, 
+##prairies productives ou prairies peu productives
+
+DONNEES_BASE$CULTSUR_prairie <- (DONNEES_BASE$CULTSUR_0405 + 
+                                   DONNEES_BASE$CULTSUR_0406 +
+                                   DONNEES_BASE$CULTSUR_0407 +
+                                   DONNEES_BASE$CULTSUR_0408)
+
+attr(DONNEES_BASE [["CULTSUR_prairie"]],"label") <- "prairies"
+
+###Pourcentage de mais et ensilage au total des cultures fourrageres et 
+#des surfaces toujours en herbe
+
+DONNEES_BASE$MAiSsurSFP  <- 100* (DONNEES_BASE$CULTSUR_0401 / 
+                                    DONNEES_BASE$CULTSUR_0400)
+
+attr(DONNEES_BASE [["MAiSsurSFP"]],"label") <- 
+  "Pourcentage de mais et ensilage"
+
+###Surafces d'arbres fruitiers y compris les vignes
+
+DONNEES_BASE$CULTSUR_arbo <- (DONNEES_BASE$CULTSUR_0901 +
+                                DONNEES_BASE$CULTSUR_0908 + 
+                                DONNEES_BASE$CULTSUR_0916 +
+                                DONNEES_BASE$CULTSUR_0924 + 
+                                DONNEES_BASE$CULTSUR_0930 +
+                                DONNEES_BASE$CULTSUR_0806)
+
+attr(DONNEES_BASE [["CULTSUR_arbo"]],"label") <- 
+  "Surafces d'arbres fruitiers y compris les vignes"
+
+###Pourcentage de vignification en cave
+
+DONNEES_BASE$VITIQ_cave <- 100* (DONNEES_BASE$CVI_301 / (DONNEES_BASE$CVI_301 +
+                                                           DONNEES_BASE$CVI_302 + 
+                                                           DONNEES_BASE$CVI_303))
+
+attr(DONNEES_BASE [["VITIQ_cave"]],"label") <- 
+  "Pourcentage de vignification en cave"
+
+###Pourcentage de vignification cooperative
+DONNEES_BASE$VITIQ_coop <- 100*(DONNEES_BASE$CVI_302 / (DONNEES_BASE$CVI_301 +
+                                                          DONNEES_BASE$CVI_302 + 
+                                                          DONNEES_BASE$CVI_303))
+
+attr(DONNEES_BASE [["VITIQ_coop"]],"label") <- 
+  "Pourcentage de vignification cooperative"
+
+###Pourcentage de vendage fraiche
+DONNEES_BASE$VITIQ_mout <- 100* (DONNEES_BASE$CVI_303 / (DONNEES_BASE$CVI_301 +
+                                                           DONNEES_BASE$CVI_302 +
+                                                           DONNEES_BASE$CVI_303))
+
+attr(DONNEES_BASE [["VITIQ_mout"]],"label")<-"Pourcentage de vendage fraiche"
+
+###Pourcentage de vente de vin aux groupements de producteurs locaux
+DONNEES_BASE$VITICOV_vrac <- 100 * (DONNEES_BASE$VITICOVQ_403 / 
+                                      DONNEES_BASE$VITICOVQ_408)
+
+attr(DONNEES_BASE [["VITICOV_vrac"]],"label") <- 
+  "Pourcentage de vente de vin aux groupements de producteurs locaux"
+
+###Pourcentage de Vente directe de vin
+DONNEES_BASE$VITICOQ_direct2 <- 100 * ((DONNEES_BASE$VITICOQ_401 +
+                                          DONNEES_BASE$VITICOQ_405 +
+                                          DONNEES_BASE$VITICOQ_406) / 
+                                         (DONNEES_BASE$VITICOQ_408 - DONNEES_BASE$VITICOVQ_408))
+
+attr(DONNEES_BASE [["VITICOQ_direct2"]],"label") <- 
+  "Pourcentage de vente directe de vin"
+
+###Vin d'appelation d'origine AOP
+DONNEES_BASE$vinAOP <- 100 * (DONNEES_BASE$CULTSUR_0802 / 
+                                DONNEES_BASE$CULTSUR_0801)
+
+attr(DONNEES_BASE [["vinAOP"]],"label") <- 
+  "Vin d'appelation d'origine AOP"
+
+###Vin d'origine géographique protégée
+DONNEES_BASE$vinIGP <- 100 * (DONNEES_BASE$CULTSUR_0803 / 
+                                DONNEES_BASE$CULTSUR_0801)
+
+attr(DONNEES_BASE [["VITIQ_cave"]],"label") <- 
+  "Pourcentage de vignification en cave"
+
+###Pourcentage géographique de vin apte é la production
+DONNEES_BASE$vinAUTREqual <- 100 *(DONNEES_BASE$CULTSUR_0804 / 
+                                     DONNEES_BASE$CULTSUR_0801)
+
+attr(DONNEES_BASE [["vinAUTREqual"]],"label") <- 
+  "Pourcentage géographique de vin apte é la production"
+
+###Coefficients UGB
+DONNEES_BASE$UGBAG_herbiv <- (DONNEES_BASE$UGBAG_BOV + 
+                                DONNEES_BASE$UGBAG_OVI + 
+                                DONNEES_BASE$UGBAG_EQU +
+                                DONNEES_BASE$UGBAG_CAP)
+
+DONNEES_BASE$UGBAG_lait2 <- (1*1.35*DONNEES_BASE$BOV1) + 
+  (0.17*1.25*DONNEES_BASE$ELEVQ_301 + 
+     0.15*1.25*DONNEES_BASE$ELEVQ_402)
+
+DONNEES_BASE$UGBAG_BLr2 <- (1*1.35*DONNEES_BASE$BOV1) / 
+  (DONNEES_BASE$UGBAG_lait2)
+
+DONNEES_BASE$UGBAG_CLr2 <- (0.17*1.25* DONNEES_BASE$ELEVQ_301) /
+  DONNEES_BASE$UGBAG_lait2
+
+DONNEES_BASE$UGBAG_OLr2 <- (0.15*1.25*DONNEES_BASE$ELEVQ_402) / 
+  DONNEES_BASE$UGBAG_lait2
+
+###Calculs PBS
+DONNEES_BASE$pbsGRANIV <- (DONNEES_BASE$pb74 +  DONNEES_BASE$pb75 + 
+                             DONNEES_BASE$pb76 + DONNEES_BASE$pb77 +
+                             DONNEES_BASE$pb78 + DONNEES_BASE$pb79 +
+                             DONNEES_BASE$pb80)
+
+DONNEES_BASE$pbsGRANIV_ratio <- (DONNEES_BASE$pbsGRANIV / 
+                                   DONNEES_BASE$PBSTOT_COEF17)
+
+DONNEES_BASE$pbsVOL <-  (DONNEES_BASE$pb77 +  DONNEES_BASE$pb78 +
+                           DONNEES_BASE$pb79)
+
+DONNEES_BASE$pbsPORC <- (DONNEES_BASE$pb74 +  DONNEES_BASE$pb75 +
+                           DONNEES_BASE$pb76)
+
+DONNEES_BASE$pbsVOL_chair <- (DONNEES_BASE$pb77 / DONNEES_BASE$pbsVOL)
+
+
+
+DONNEES_BASE$pbsVOL_pond <- (DONNEES_BASE$pb78 / DONNEES_BASE$pbsVOL)
+
+DONNEES_BASE$pb_animaux <- (DONNEES_BASE$pbsGRANIV + DONNEES_BASE$pb62 +
+                              DONNEES_BASE$pb63 + DONNEES_BASE$pb64 +
+                              DONNEES_BASE$pb65 + DONNEES_BASE$pb66 +
+                              DONNEES_BASE$pb67 + DONNEES_BASE$pb68 +
+                              DONNEES_BASE$pb69 + DONNEES_BASE$pb70 +
+                              DONNEES_BASE$pb71 + DONNEES_BASE$pb72 +
+                              DONNEES_BASE$pb73 + DONNEES_BASE$pb81)
+
+###Capacité d'elevage de l'exploitation
+DONNEES_BASE$ELEVQ_places <- DONNEES_BASE$ELEVQ_514 / DONNEES_BASE$ELEVQ_501
+
+attr(DONNEES_BASE [["ELEVQ_places"]],"label") <- 
+  "Capacité d'elevage de l'exploitation"
+
+###Méthodes de travail de sol
+DONNEES_BASE$TERREVAL_labour <- 100*DONNEES_BASE$TERREVAL_605 / 
+  (DONNEES_BASE$TERREVAL_605 +  DONNEES_BASE$TERREVAL_606 + 
+     DONNEES_BASE$TERREVAL_607)
+
+DONNEES_BASE$TERREVAL_sanslabour <- 100*DONNEES_BASE$TERREVAL_607 / 
+  (DONNEES_BASE$TERREVAL_605 +  DONNEES_BASE$TERREVAL_606 + 
+     DONNEES_BASE$TERREVAL_607)
+
+DONNEES_BASE$TERREVAL_pasretournt <- 100*DONNEES_BASE$TERREVAL_606 / 
+  (DONNEES_BASE$TERREVAL_605 + DONNEES_BASE$TERREVAL_606 + 
+     DONNEES_BASE$TERREVAL_607)
+
+###Total en KW de production d'energies renouvelables
+
+DONNEES_BASE$EQUIPVAL_watt <- (DONNEES_BASE$EQUIPVAL_101 + 
+                                 DONNEES_BASE$EQUIPVAL_102 + 
+                                 DONNEES_BASE$EQUIPVAL_103 + 
+                                 DONNEES_BASE$EQUIPVAL_104 + 
+                                 DONNEES_BASE$EQUIPVAL_105 +
+                                 DONNEES_BASE$EQUIPVAL_106)
+
+attr(DONNEES_BASE [["EQUIPVAL_watt"]],"label") <- 
+  "Total de production energie renouvelables"
+
+
+####Présence de certification produits BIO
+
+DONNEES_BASE$BIOFIL="BIOFIL" 
+DONNEES_BASE$BIOFIL [(DONNEES_BASE$BIOORG  !=  " ")]="1"
+
+####Le successeur de l'éxploitation
+
+DONNEES_BASE$SUCCESS2 <- "SUCCESS2"
+
+DONNEES_BASE$SUCCESS2[(DONNEES_BASE$SUCCESS == "1")] ="1"
+
+DONNEES_BASE$SUCCESS2[(DONNEES_BASE$SUCCESS == "2" |
+                         DONNEES_BASE$SUCCESS == "3" | 
+                         DONNEES_BASE$SUCCESS == "4" )]="2"
+
+DONNEES_BASE$SUCCESS2[(DONNEES_BASE$SUCCESS == "5" | 
+                         DONNEES_BASE$SUCCESS == "6" | 
+                         DONNEES_BASE$SUCCESS == "7" )]="3"
+
+DONNEES_BASE$SUCCESS2[(DONNEES_BASE$SUCCESS == "8" | 
+                         DONNEES_BASE$SUCCESS == "0")]="4"
+
+DONNEES_BASE$SUCCESS2[(DONNEES_BASE$SUCCESS == "9")]="5"
+
+######Péturage
+
+DONNEES_BASE$PATDMOIS_CAP <- DONNEES_BASE$PATDMOIS_1107 
+
+DONNEES_BASE$PATFMOIS_CAP <- DONNEES_BASE$PATFMOIS_1107
+
+DONNEES_BASE$PATDQUINZ_CAP <- DONNEES_BASE$PATDQUINZ_1107
+
+DONNEES_BASE$PATFQUINZ_CAP <-DONNEES_BASE$PATFQUINZ_1107
+
+#####Nombre total de volailles
+
+DONNEES_BASE$TOTAL_VOLAILLES <- (DONNEES_BASE$ELEVQ_701 + 
+                                   DONNEES_BASE$ELEVQ_702 + DONNEES_BASE$ELEVQ_703 +  
+                                   DONNEES_BASE$ELEVQ_704 +  DONNEES_BASE$ELEVQ_705 +  
+                                   DONNEES_BASE$ELEVQ_706 +  DONNEES_BASE$ELEVQ_707 +  
+                                   DONNEES_BASE$ELEVQ_708 +  DONNEES_BASE$ELEVQ_709 +
+                                   DONNEES_BASE$ELEVQ_710 +  DONNEES_BASE$ELEVQ_711 + 
+                                   DONNEES_BASE$ELEVQ_712 +  DONNEES_BASE$ELEVQ_713)
+
+attr(DONNEES_BASE [["TOTAL_VOLAILLES"]],"label") <- 
+  "Nombre total de volailles"
+
+###Présence de la culture
+
+DONNEES_BASE$DEVSUR_01_C [DONNEES_BASE$DEVSUR_01 > 0] <- 1 
+DONNEES_BASE$DEVSUR_02_C [DONNEES_BASE$DEVSUR_02 > 0] <- 1
+DONNEES_BASE$DEVSUR_03_C [DONNEES_BASE$DEVSUR_03 > 0] <- 1
+DONNEES_BASE$DEVSUR_04_C [DONNEES_BASE$DEVSUR_04 > 0] <- 1
+DONNEES_BASE$DEVSUR_05_C [DONNEES_BASE$DEVSUR_05 > 0] <- 1
+DONNEES_BASE$DEVSUR_06_C [DONNEES_BASE$DEVSUR_06 > 0] <- 1
+DONNEES_BASE$DEVSUR_07_C [DONNEES_BASE$DEVSUR_07 > 0] <- 1
+DONNEES_BASE$DEVSUR_08_C [DONNEES_BASE$DEVSUR_08 > 0] <- 1
+DONNEES_BASE$DEVSUR_09_C [DONNEES_BASE$DEVSUR_09 > 0] <- 1
+DONNEES_BASE$DEVSUR_10_C [DONNEES_BASE$DEVSUR_10 >0]  <- 1
+DONNEES_BASE$DEVSUR_11_C [DONNEES_BASE$DEVSUR_11 > 0] <- 1
+DONNEES_BASE$DEVSUR_12_C [DONNEES_BASE$DEVSUR_12 > 0] <- 1
+DONNEES_BASE$DEVSUR_13_C [DONNEES_BASE$DEVSUR_13 > 0] <- 1
+DONNEES_BASE$DEVSUR_14_C [DONNEES_BASE$DEVSUR_14 > 0] <- 1
+DONNEES_BASE$DEVSUR_15_C [DONNEES_BASE$DEVSUR_15 > 0] <- 1
+DONNEES_BASE$DEVSUR_16_C [DONNEES_BASE$DEVSUR_16 > 0] <- 1
+DONNEES_BASE$DEVSUR_17_C [DONNEES_BASE$DEVSUR_17 > 0] <- 1
+DONNEES_BASE$DEVSUR_18_C [DONNEES_BASE$DEVSUR_18 > 0] <- 1
+DONNEES_BASE$DEVSUR_19_C [DONNEES_BASE$DEVSUR_19 > 0] <- 1
+DONNEES_BASE$DEVSUR_20_C [DONNEES_BASE$DEVSUR_20 > 0] <- 1
+DONNEES_BASE$DEVSUR_21_C [DONNEES_BASE$DEVSUR_21 > 0] <- 1
+DONNEES_BASE$DEVSUR_22_C [DONNEES_BASE$DEVSUR_22 > 0] <- 1
+DONNEES_BASE$DEVSUR_23_C [DONNEES_BASE$DEVSUR_23 > 0] <- 1
+DONNEES_BASE$DEVSUR_24_C [DONNEES_BASE$DEVSUR_24 > 0] <- 1
+DONNEES_BASE$DEVSUR_25_C [DONNEES_BASE$DEVSUR_25 > 0] <- 1
+DONNEES_BASE$DEVSUR_26_C [DONNEES_BASE$DEVSUR_26 > 0] <- 1
+DONNEES_BASE$DEVSUR_27_C [DONNEES_BASE$DEVSUR_27 > 0] <- 1
+DONNEES_BASE$DEVSUR_28_C [DONNEES_BASE$DEVSUR_28 > 0] <- 1
+DONNEES_BASE$DEVSUR_29_C [DONNEES_BASE$DEVSUR_29 > 0] <- 1
+DONNEES_BASE$DEVSUR_30_C [DONNEES_BASE$DEVSUR_30 > 0] <- 1
+DONNEES_BASE$DEVSUR_31_C [DONNEES_BASE$DEVSUR_31 > 0] <- 1
+DONNEES_BASE$DEVSUR_32_C [DONNEES_BASE$DEVSUR_32 > 0] <- 1
+DONNEES_BASE$DEVSUR_33_C [DONNEES_BASE$DEVSUR_33 > 0] <- 1
+DONNEES_BASE$DEVSUR_34_C [DONNEES_BASE$DEVSUR_34 > 0] <- 1
+DONNEES_BASE$DEVSUR_35_C [DONNEES_BASE$DEVSUR_35 >0]  <- 1
+DONNEES_BASE$DEVSUR_36_C [DONNEES_BASE$DEVSUR_36 > 0] <- 1
+DONNEES_BASE$DEVSUR_37_C [DONNEES_BASE$DEVSUR_37 > 0] <- 1
+DONNEES_BASE$DEVSUR_38_C [DONNEES_BASE$DEVSUR_38 > 0] <- 1
+DONNEES_BASE$DEVSUR_39_C [DONNEES_BASE$DEVSUR_39 > 0] <- 1
+DONNEES_BASE$DEVSUR_40_C [DONNEES_BASE$DEVSUR_40 > 0] <- 1
+DONNEES_BASE$DEVSUR_41_C [DONNEES_BASE$DEVSUR_41 > 0] <- 1
+DONNEES_BASE$DEVSUR_42_C [DONNEES_BASE$DEVSUR_42 > 0] <- 1
+DONNEES_BASE$DEVSUR_43_C [DONNEES_BASE$DEVSUR_43 > 0] <- 1
+DONNEES_BASE$DEVSUR_44_C [DONNEES_BASE$DEVSUR_44 > 0] <- 1
+DONNEES_BASE$DEVSUR_45_C [DONNEES_BASE$DEVSUR_45 > 0] <- 1
+DONNEES_BASE$DEVSUR_46_C [DONNEES_BASE$DEVSUR_46 > 0] <- 1
+DONNEES_BASE$DEVSUR_47_C [DONNEES_BASE$DEVSUR_47 > 0] <- 1
+DONNEES_BASE$DEVSUR_48_C [DONNEES_BASE$DEVSUR_48 > 0] <- 1
+DONNEES_BASE$DEVSUR_49_C [DONNEES_BASE$DEVSUR_49 > 0] <- 1
+DONNEES_BASE$DEVSUR_50_C [DONNEES_BASE$DEVSUR_50 > 0] <- 1
+DONNEES_BASE$DEVSUR_51_C [DONNEES_BASE$DEVSUR_51 > 0] <- 1
+DONNEES_BASE$DEVSUR_52_C [DONNEES_BASE$DEVSUR_52 > 0] <- 1
+DONNEES_BASE$DEVSUR_53_C [DONNEES_BASE$DEVSUR_53 > 0] <- 1
+DONNEES_BASE$DEVSUR_54_C [DONNEES_BASE$DEVSUR_54 > 0] <- 1
+DONNEES_BASE$DEVSUR_55_C [DONNEES_BASE$DEVSUR_55 > 0] <- 1
+DONNEES_BASE$DEVSUR_56_C [DONNEES_BASE$DEVSUR_56 > 0] <- 1
+DONNEES_BASE$DEVSUR_57_C [DONNEES_BASE$DEVSUR_57 > 0] <- 1
+DONNEES_BASE$DEVSUR_58_C [DONNEES_BASE$DEVSUR_58 > 0] <- 1
+DONNEES_BASE$DEVSUR_59_C [DONNEES_BASE$DEVSUR_59 > 0] <- 1
+DONNEES_BASE$DEVSUR_60_C [DONNEES_BASE$DEVSUR_60 > 0] <- 1
+DONNEES_BASE$DEVSUR_61_C [DONNEES_BASE$DEVSUR_61 > 0] <- 1
+DONNEES_BASE$DEVSUR_62_C [DONNEES_BASE$DEVSUR_62 > 0] <- 1
+
+
+###Calcul de somme de nombre de cultures présentes pour chaque agriculteur
+
+DONNEES_BASE$DEVSUR_compteur <- 
+  (DONNEES_BASE$DEVSUR_01_C + DONNEES_BASE$DEVSUR_02_C + 
+     DONNEES_BASE$DEVSUR_03_C + DONNEES_BASE$DEVSUR_04_C +
+     DONNEES_BASE$DEVSUR_05_C + DONNEES_BASE$DEVSUR_06_C +
+     DONNEES_BASE$DEVSUR_07_C + DONNEES_BASE$DEVSUR_08_C +
+     DONNEES_BASE$DEVSUR_09_C + DONNEES_BASE$DEVSUR_10_C + 
+     DONNEES_BASE$DEVSUR_11_C + DONNEES_BASE$DEVSUR_12_C +
+     DONNEES_BASE$DEVSUR_13_C + DONNEES_BASE$DEVSUR_14_C +
+     DONNEES_BASE$DEVSUR_15_C + DONNEES_BASE$DEVSUR_16_C +
+     DONNEES_BASE$DEVSUR_17_C + DONNEES_BASE$DEVSUR_18_C +
+     DONNEES_BASE$DEVSUR_19_C + DONNEES_BASE$DEVSUR_20_C +
+     DONNEES_BASE$DEVSUR_21_C + DONNEES_BASE$DEVSUR_22_C +
+     DONNEES_BASE$DEVSUR_23_C + DONNEES_BASE$DEVSUR_24_C +
+     DONNEES_BASE$DEVSUR_25_C + DONNEES_BASE$DEVSUR_26_C +
+     DONNEES_BASE$DEVSUR_27_C + DONNEES_BASE$DEVSUR_28_C +
+     DONNEES_BASE$DEVSUR_29_C + DONNEES_BASE$DEVSUR_30_C +
+     DONNEES_BASE$DEVSUR_31_C + DONNEES_BASE$DEVSUR_32_C +
+     DONNEES_BASE$DEVSUR_33_C + DONNEES_BASE$DEVSUR_34_C +
+     DONNEES_BASE$DEVSUR_35_C + DONNEES_BASE$DEVSUR_36_C +
+     DONNEES_BASE$DEVSUR_37_C + DONNEES_BASE$DEVSUR_38_C +
+     DONNEES_BASE$DEVSUR_39_C + DONNEES_BASE$DEVSUR_40_C +
+     DONNEES_BASE$DEVSUR_41_C + DONNEES_BASE$DEVSUR_42_C +
+     DONNEES_BASE$DEVSUR_43_C + DONNEES_BASE$DEVSUR_44_C +
+     DONNEES_BASE$DEVSUR_45_C + DONNEES_BASE$DEVSUR_46_C +
+     DONNEES_BASE$DEVSUR_47_C + DONNEES_BASE$DEVSUR_48_C +
+     DONNEES_BASE$DEVSUR_49_C + DONNEES_BASE$DEVSUR_50_C +
+     DONNEES_BASE$DEVSUR_51_C + DONNEES_BASE$DEVSUR_52_C +
+     DONNEES_BASE$DEVSUR_53_C + DONNEES_BASE$DEVSUR_54_C +
+     DONNEES_BASE$DEVSUR_55_C + DONNEES_BASE$DEVSUR_56_C +
+     DONNEES_BASE$DEVSUR_57_C + DONNEES_BASE$DEVSUR_58_C +
+     DONNEES_BASE$DEVSUR_59_C + DONNEES_BASE$DEVSUR_60_C +
+     DONNEES_BASE$DEVSUR_61_C + DONNEES_BASE$DEVSUR_62_C +
+     DONNEES_BASE$CULTSUR_0601_C + DONNEES_BASE$CULTSUR_0602_C)
+
+###Suppression des exploitations vacantes et les pacages collectifs 
+#(déjé fait dans le fichier national enrichi de la typologie)
+###Toujours calculé au SSP
+
+DONNEES_BASE <- filter(DONNEES_BASE,COLLECTIFFIL != '1' & VACANTE != '1')
+
+##################Debut du script 1N, du RA 2010 en R####################
+
+###Cases typologiques:
+
+DONNEES_BASE$TYPO_NATIONALE_APCA_NIV1 <- "Exploitation_non_affectée_niv1"
+DONNEES_BASE$TYPO_NATIONALE_APCA_NIV2 <- "Exploitation_non_affectée_niv2"
+DONNEES_BASE$TYPO_NATIONALE_APCA_NIV3 <- "Exploitation_non_affectée_niv3"
+DONNEES_BASE$TYPO_NATIONALE_APCA_NIV4 <- "Exploitation_non_affectée_niv4"
+DONNEES_BASE$TYPO_NATIONALE_APCA_NIV5 <- "Exploitation_non_affectée_niv5"
+DONNEES_BASE$TYPO_NATIONALE_APCA_NIV6 <- "Exploitation_non_affectée_niv6"
+DONNEES_BASE$TYPO_NATIONALE_APCA_NIV7 <- "Exploitation_non_affectée_niv7"
+DONNEES_BASE$TYPO_NATIONALE_APCA_NIV8 <- "Exploitation_non_affectée_niv8"
+DONNEES_BASE$TYPO_NATIONALE_APCA_NIV9 <- "Exploitation_non_affectée_niv9"
+DONNEES_BASE$TYPO_NATIONALE_APCA_NIV10 <- "Exploitation_non_affectée_niv10"
+DONNEES_BASE$TYPO_NATIONALE_APCA_NIV1_AN <- "Exploitation_non_affectée_niv1_an"
+
+##### I.Exploitations animaux de loisir ou non alimentaires et apiculteurs####
+#Fichier source : petites exploitations repéchées, moyennes et grandes 
+
+DONNEES_BASE<- DONNEES_BASE %>% 
+  mutate(TYPO_NATIONALE_APCA_NIV1=ifelse(TYPO_NATIONALE_APCA_NIV1=="Exploitation_non_affectée_niv1" 
+                                         & ((ELEVQ_200 >= 5 | ELEVQ_801 >= 50  
+                                             | ELEVFOUR=="1"  | ELEVGIB=="1"  
+                                             | ELEVVIAND=="1" | ELEVAUT=="1" )
+                                            & ((CULTSUR_GC) < 2000)
+                                            & (CULTSUR_0506+CULTSUR_0507)==0
+                                            & DEVSUR_compteur<=5 
+                                            & CULTSUR_0801 < 150 
+                                            & (CULTSUR_0700+ CULTSUR_0958+ CULTSUR_0807+ CULTSUR_0808) == 0 
+                                            & (CULTSUR_0901+ CULTSUR_0908+ CULTSUR_0916+ CULTSUR_0924
+                                               + CULTSUR_0930+ CULTSUR_0806) <100
+                                            & (CULTSUR_0901+ CULTSUR_0908+ CULTSUR_0916+ CULTSUR_0924
+                                               + CULTSUR_0930+ CULTSUR_0806+CULTSUR_0801)<150
+                                            & (CULTSUR_0913 < 50)
+                                            & BOV1 < 5 
+                                            & BOV2 < 10
+                                            & (BOV4+ BOV5+ BOV6+ BOV7+ BOV8+ BOV9
+                                               + BOV10+ BOV11+ BOV12+ BOV13+ BOV14+ BOV15) < 10 
+                                            & ((ELEVQ_301 < 10 & DIVACTEXP_201 == "1") 
+                                               | (ELEVQ_301 < 50 & DIVACTEXP_201 =="0") 
+                                               |  (ELEVQ_301 < 50 & DIVACTEXP_201 == "")) 
+                                            & ELEVQ_401<50
+                                            & ELEVQ_402<25
+                                            & ELEVQ_501 < 10 
+                                            & (ELEVQ_514+ ELEVQ_509)< 50 
+                                            & (ELEVQ_701+ ELEVQ_703) < 200
+                                            & (ELEVQ_702+ ELEVQ_711) < 200
+                                            & (ELEVQ_704+ ELEVQ_705+ ELEVQ_707+ ELEVQ_709) < 200
+                                            & (ELEVQ_706+ ELEVQ_708) < 100
+                                            & ELEVQ_710 < 30
+                                            & ELEVQ_712 < 500
+                                            & ELEVQ_713 < 200
+                                            & ELEVQ_721 < 150 
+                                            & ELEVQ_720 < 500 
+                                            & ELEVQ_601 < 50 
+                                            & ELEVQ_602 < 200 
+                                            & TOTAL_VOLAILLES < 500
+                                            & GAVAGEVOL  != "1"),
+                                         "I",
+                                         TYPO_NATIONALE_APCA_NIV1))
+
+###Catégories exploitations animaux loisir, non alimentaires,apiculteurs
+####I.1.apiculteurs#### 
+
+DONNEES_BASE <-DONNEES_BASE %>%
+  mutate(TYPO_NATIONALE_APCA_NIV2 = ifelse((
+    TYPO_NATIONALE_APCA_NIV1 == "I" & ELEVQ_200 < 5 & ELEVQ_801 >= 50 
+    & ELEVFOUR == "0" &  ELEVGIB == "0" &   ELEVVIAND == "0" & ELEVAUT == "0"), 
+    "I.1",
+    TYPO_NATIONALE_APCA_NIV2))
+
+####I.2.Exploitations équines spécialisées####
+
+DONNEES_BASE <- DONNEES_BASE %>%
+  mutate(TYPO_NATIONALE_APCA_NIV2 = ifelse((
+    TYPO_NATIONALE_APCA_NIV1 == "I" 
+    & TYPO_NATIONALE_APCA_NIV2 == "Exploitation_non_affectée_niv2" 
+    & ELEVQ_200 >= 5 & ELEVQ_801 < 50  
+    & ELEVFOUR == "0"  & ELEVGIB == "0"  & ELEVVIAND == "0" & ELEVAUT == "0" ),
+    "I.2",
+    TYPO_NATIONALE_APCA_NIV2))
+
+####I.3 Elevages (gibier, fourrures, autres)####
+
+DONNEES_BASE<- DONNEES_BASE %>% 
+  mutate(TYPO_NATIONALE_APCA_NIV2=ifelse (TYPO_NATIONALE_APCA_NIV1== "I"
+                                          & TYPO_NATIONALE_APCA_NIV2=="Exploitation_non_affectée_niv2",
+                                          "I.3",
+                                          TYPO_NATIONALE_APCA_NIV2))
+
+
+######### Statuts spéciaux#######
+###fichier source : Petites repéchées, moyennes et grandes exploitations 
+
+DONNEES_BASE<- DONNEES_BASE %>% 
+  mutate(TYPO_NATIONALE_APCA_NIV1 = 
+           ifelse(TYPO_NATIONALE_APCA_NIV1 == "Exploitation_non_affectée_niv1" 
+                  & STATEXP == "05" | (STATEXP == "06" & CULTSUR_1200 == 0), 
+                  "0",
+                  TYPO_NATIONALE_APCA_NIV1)) 
+
+# sélection champ pour les niveaux II III IV####  
+
+DONNEES_BASE<-DONNEES_BASE %<>%   
+  mutate(TYPO_NATIONALE_APCA_NIV1 =ifelse(TYPO_NATIONALE_APCA_NIV1=="Exploitation_non_affectée_niv1"  
+                                          &((((ELEVQ_200 < 5 & ELEVQ_801 < 50
+                                               & (ELEVFOUR=="0" | ELEVFOUR=="")  
+                                               & (ELEVGIB=="0" | ELEVGIB=="") 
+                                               & (ELEVVIAND=="0" | ELEVVIAND=="") 
+                                               & (ELEVAUT=="0" | ELEVAUT==""))) 
+                                             | ((ELEVQ_200 >= 5 | ELEVQ_801 >=50 
+                                                 | ELEVFOUR=="1" | ELEVGIB=="1"  
+                                                 | ELEVVIAND=="1" | ELEVAUT=="1")
+                                                & ((CULTSUR_GC) >= 2000 
+                                                   | ( (CULTSUR_0506+  CULTSUR_0507)>0 
+                                                       | DEVSUR_compteur>5)
+                                                   | CULTSUR_0801 >= 150 
+                                                   |  (CULTSUR_0700+  CULTSUR_0958+  CULTSUR_0807+  CULTSUR_0808) > 0 
+                                                   |  (CULTSUR_0901+  CULTSUR_0908+  CULTSUR_0916+  CULTSUR_0924
+                                                       +  CULTSUR_0930+  CULTSUR_0806) >=100
+                                                   |  (CULTSUR_0901+  CULTSUR_0908+  CULTSUR_0916+  CULTSUR_0924
+                                                       +  CULTSUR_0930+  CULTSUR_0806+  CULTSUR_0801) >=150
+                                                   | (CULTSUR_0913 >= 50)
+                                                   | BOV1 >= 5 
+                                                   | BOV2 >= 10 
+                                                   |  (BOV4+  BOV5+  BOV6+  BOV7+  BOV8+  BOV9+  BOV10
+                                                       +  BOV11+  BOV12+  BOV13+  BOV14+  BOV15) >= 10 
+                                                   | ((ELEVQ_301 >= 10 & DIVACTEXP_201 == "1") 
+                                                      | (ELEVQ_301 >= 50 & DIVACTEXP_201 == "0") 
+                                                      |  (ELEVQ_301 >= 50 & DIVACTEXP_201 == "")) 
+                                                   | ELEVQ_401 >= 50
+                                                   | ELEVQ_402 >= 25
+                                                   | ELEVQ_501 >= 10 
+                                                   |  (ELEVQ_514+  ELEVQ_509)>= 50 
+                                                   |  (ELEVQ_701+  ELEVQ_703) >= 200
+                                                   |  (ELEVQ_702+  ELEVQ_711) >= 200
+                                                   |  (ELEVQ_704+  ELEVQ_705+  ELEVQ_707+  ELEVQ_709) >= 200
+                                                   |  (ELEVQ_706+  ELEVQ_708) >= 100
+                                                   | ELEVQ_710 >= 30
+                                                   | ELEVQ_712 >= 500
+                                                   | ELEVQ_713 >= 200
+                                                   | ELEVQ_721 >= 150 
+                                                   | ELEVQ_720 >= 500 
+                                                   | ELEVQ_601 >= 50 
+                                                   | ELEVQ_602 >= 200 
+                                                   | TOTAL_VOLAILLES >= 500
+                                                   | GAVAGEVOL == "1" )))
+                                            & (STATEXP =="01" 
+                                               | STATEXP =="02" 
+                                               | STATEXP =="03" 
+                                               | STATEXP =="04" 
+                                               | STATEXP =="07" 
+                                               | STATEXP =="08" 
+                                               | STATEXP =="09" 
+                                               | STATEXP =="10" 
+                                               | STATEXP =="11"
+                                               | (STATEXP =="06" & CULTSUR_1200>0))),
+                                          "Sous base niveaux II III IV",
+                                          TYPO_NATIONALE_APCA_NIV1))
+
+
+## II. expl. végétales ####
+
+### Fichier source : II III IV ####
+
+DONNEES_BASE<-DONNEES_BASE %<>%    
+  mutate(TYPO_NATIONALE_APCA_NIV2= ifelse(TYPO_NATIONALE_APCA_NIV1 == "Sous base niveaux II III IV"
+                                          & TYPO_NATIONALE_APCA_NIV2 == "Exploitation_non_affectée_niv2" 
+                                          & ((BOV1 < 5)
+                                             & (BOV2 < 10)
+                                             & ((BOV4 + BOV5 + BOV6 + BOV7 + BOV8 
+                                                 +BOV9 + BOV10 + BOV11 + BOV12 + BOV13 + BOV14 + BOV15) < 10)
+                                             & (ELEVQ_401 < 50)
+                                             & (ELEVQ_402 < 25)
+                                             & (ELEVQ_501 < 10) 
+                                             & ((ELEVQ_514 + ELEVQ_509) < 50 )
+                                             & ((ELEVQ_701 + ELEVQ_703) < 200)
+                                             & ((ELEVQ_702 + ELEVQ_711) < 200) 
+                                             & ((ELEVQ_704 + ELEVQ_705 + ELEVQ_707 + ELEVQ_709) < 200) 
+                                             & ((ELEVQ_706 + ELEVQ_708) < 100)
+                                             & ELEVQ_710 < 30 
+                                             & ELEVQ_712 < 500 
+                                             & ELEVQ_713 < 200 
+                                             & ELEVQ_721 < 150 
+                                             & ELEVQ_720 < 500 
+                                             & ELEVQ_601 < 50 
+                                             & ELEVQ_602 < 200 
+                                             & TOTAL_VOLAILLES < 500
+                                             & (GAVAGEVOL == "0" |GAVAGEVOL == "") 
+                                             & ( (DIVACTEXP_201 =="1" & ELEVQ_301 < 10) 
+                                                 |(DIVACTEXP_201 ==""  & ELEVQ_301 < 50) 
+                                                 |(DIVACTEXP_201 =="0" & ELEVQ_301 < 50))),
+                                          "II",  
+                                          TYPO_NATIONALE_APCA_NIV2))
+
+
+
+####### V.Petits élevages####
+
+DONNEES_BASE<-DONNEES_BASE %<>%    
+  mutate(TYPO_NATIONALE_APCA_NIV2=ifelse(TYPO_NATIONALE_APCA_NIV1 == "Sous base niveaux II III IV"
+                                         & TYPO_NATIONALE_APCA_NIV2 == "II" 
+                                         & (pb_animaux > 0.66* PBSTOT_COEF17),
+                                         "V",
+                                         TYPO_NATIONALE_APCA_NIV2))
+
+#####II.1.Exploitations Grandes cultures et légumes de plein champs####
+
+
+DONNEES_BASE<-DONNEES_BASE %<>%    
+  mutate( TYPO_NATIONALE_APCA_NIV3=ifelse( TYPO_NATIONALE_APCA_NIV2=="II"
+                                           & TYPO_NATIONALE_APCA_NIV3=="Exploitation_non_affectée_niv3"
+                                           & (CULTSUR_0801 < 150 
+                                              &  (CULTSUR_0901+  CULTSUR_0908+  CULTSUR_0916+  CULTSUR_0924
+                                                  +  CULTSUR_0930+  CULTSUR_0806) < 100
+                                              &  (CULTSUR_0901+  CULTSUR_0908+  CULTSUR_0916+  CULTSUR_0924
+                                                  +  CULTSUR_0930+  CULTSUR_0806+  CULTSUR_0801) < 150
+                                              & CULTSUR_0913 < 50
+                                              &  (CULTSUR_0701+  CULTSUR_0704+  CULTSUR_0705) == 0
+                                              &  (CULTSUR_0958+  CULTSUR_0807+  CULTSUR_0808) == 0
+                                              &  (CULTSUR_0506+  CULTSUR_0507) == 0 
+                                              &  CULTSUR_GC>=0.05*CULTSUR_1200  
+                                              & DEVSUR_compteur <=5
+                                              & pb60==0),
+                                           "II.1",
+                                           TYPO_NATIONALE_APCA_NIV3))
+
+#Remarque:Critére pb60 = pbs champignon (les champignons et autres cultures 
+#particuliéres sont é traiter é part suivant les besoins des régions)
+
+###II.1.A.Exploitations COP et cultures industrielles et légumes plein champs
+
+
+DONNEES_BASE <- DONNEES_BASE %>%
+  mutate(TYPO_NATIONALE_APCA_NIV4 = ifelse((
+    TYPO_NATIONALE_APCA_NIV3 == "II.1"
+    & TYPO_NATIONALE_APCA_NIV4=="Exploitation_non_affectée_niv4"
+    & (CULTSUR_0301 >= 1000
+       |(CULTSUR_0301 ) >= 0.1 *CULTSUR_GC
+       | (CULTSUR_0600) >= 500 
+       | CULTSUR_0212 >= 1000 
+       |(CULTSUR_0305 + CULTSUR_0307 +CULTSUR_0308 + CULTSUR_0309 + 
+           CULTSUR_0504 + CULTSUR_0501) >= 150
+       |(CULTSUR_0301 + CULTSUR_0212 + CULTSUR_0305 + CULTSUR_0307 +
+           CULTSUR_0308 + CULTSUR_0309 + CULTSUR_0504 + CULTSUR_0501 + 
+           CULTSUR_0600)  >= 0.1*CULTSUR_GC)
+    & (CULTSUR_0304 + DEVSUR_01 + CULTSUR_0302 + CULTSUR_0303) == 0
+    & ((CULTSUR_0406 + CULTSUR_0407 + CULTSUR_0408 + CULTSUR_1001 + 
+          CULTSUR_1002) ) < 0.2*CULTSUR_1200 ),
+    "II.1.A",(TYPO_NATIONALE_APCA_NIV4)))
+
+####II.1.A.a. Exploitations avec betterave
+
+DONNEES_BASE <- DONNEES_BASE %>%
+  mutate(TYPO_NATIONALE_APCA_NIV5 = ifelse((
+    TYPO_NATIONALE_APCA_NIV4 == "II.1.A"  
+    & TYPO_NATIONALE_APCA_NIV5 == "Exploitation_non_affectée_niv5" 
+    & (((CULTSUR_0301 >= 1000 | (CULTSUR_GC!=0 &(CULTSUR_0301 /CULTSUR_GC) >= 0.1))
+        & ((CULTSUR_0504 + CULTSUR_0501)  < 0.2*(CULTSUR_GC))
+        & (CULTSUR_0212 < 1000 & (CULTSUR_0212 < 0.1 *CULTSUR_GC)) 
+        & CULTSUR_0600 < 500))),
+    "II.1.A.a",
+    TYPO_NATIONALE_APCA_NIV5))
+
+####II.1.A.a.i. exploitations spécialisées betterave
+
+# DONNEES_BASE <- DONNEES_BASE %>%
+#   mutate(TYPO_NATIONALE_APCA_NIV6 = case_when(
+#     TYPO_NATIONALE_APCA_NIV1 == "Sous base niveaux II III IV" 
+#     & TYPO_NATIONALE_APCA_NIV2 == "II" 
+#     & TYPO_NATIONALE_APCA_NIV3 == "II.1" 
+#     & TYPO_NATIONALE_APCA_NIV4 == "II.1.A" 
+#     & TYPO_NATIONALE_APCA_NIV5 == "II.1.A.a" 
+#     & TYPO_NATIONALE_APCA_NIV6 == "Exploitation_non_affectée_niv6" 
+#     & ((CULTSUR_0212 + CULTSUR_0307 + CULTSUR_0308 + CULTSUR_0309 + 
+#           CULTSUR_0501 + CULTSUR_0504 + CULTSUR_0600) == 0)
+#     ~  "II.1.A.a.i",
+#     
+#     TRUE  ~ (TYPO_NATIONALE_APCA_NIV6)))
+
+####II.1.A.a.ii. Exploitations betterave et autres cultures
+# 
+# DONNEES_BASE <- DONNEES_BASE %>%
+#   mutate(TYPO_NATIONALE_APCA_NIV6 = case_when(
+#     TYPO_NATIONALE_APCA_NIV1 == "Sous base niveaux II III IV" 
+#     & TYPO_NATIONALE_APCA_NIV2 == "II" 
+#     & TYPO_NATIONALE_APCA_NIV3 == "II.1"  
+#     & TYPO_NATIONALE_APCA_NIV4 == "II.1.A" 
+#     & TYPO_NATIONALE_APCA_NIV5 == "II.1.A.a"
+#     & TYPO_NATIONALE_APCA_NIV6 == "Exploitation_non_affectée_niv6" 
+#     & ((CULTSUR_0212 + CULTSUR_0307 + CULTSUR_0308 + CULTSUR_0309 + 
+#           CULTSUR_0501 + CULTSUR_0504 + CULTSUR_0600) > 0)
+#     ~  "II.1.A.a.ii",
+#     
+#     TRUE ~ (TYPO_NATIONALE_APCA_NIV6)))
+
+#####II.1.A.b. Exploitations légumiéres
+
+DONNEES_BASE <- DONNEES_BASE %>%
+  mutate(TYPO_NATIONALE_APCA_NIV5 = ifelse((
+    TYPO_NATIONALE_APCA_NIV4 == "II.1.A"
+    & TYPO_NATIONALE_APCA_NIV5 == "Exploitation_non_affectée_niv5" 
+    & (((CULTSUR_0504 + CULTSUR_0501) / (CULTSUR_GC)) >= 0.2
+       & CULTSUR_0301 < 1000 & (CULTSUR_0301 /CULTSUR_GC) < 0.1 
+       & (CULTSUR_0212 < 1000 & CULTSUR_0212 / CULTSUR_GC < 0.1) 
+       & CULTSUR_0600 < 500)),
+    "II.1.A.b",
+    TYPO_NATIONALE_APCA_NIV5))
+
+######II.1.A.b.i.Légumiers mono spécifique
+
+# DONNEES_BASE <- DONNEES_BASE %>%
+#   mutate(TYPO_NATIONALE_APCA_NIV6 = case_when(
+#     TYPO_NATIONALE_APCA_NIV1 == "Sous base niveaux II III IV"
+#     & TYPO_NATIONALE_APCA_NIV2 == "II" 
+#     & TYPO_NATIONALE_APCA_NIV3 == "II.1"
+#     & TYPO_NATIONALE_APCA_NIV4 == "II.1.A"
+#     & TYPO_NATIONALE_APCA_NIV5 == "II.1.A.b"
+#     & TYPO_NATIONALE_APCA_NIV6 == "Exploitation_non_affectée_niv6"
+#     & (DEVSUR_compteur == 1 | (DEVSUR_compteur == 0 & CULTSUR_0501 > 0))
+#     ~  "II.1.A.b.i",
+#     
+#     TRUE  ~ (TYPO_NATIONALE_APCA_NIV6)))
+
+###II.1.A.b.ii.Légumiers multi production
+
+# DONNEES_BASE <- DONNEES_BASE %>%
+#   mutate(TYPO_NATIONALE_APCA_NIV6 = case_when(
+#     TYPO_NATIONALE_APCA_NIV1 == "Sous base niveaux II III IV"
+#     & TYPO_NATIONALE_APCA_NIV2 =="II" 
+#     & TYPO_NATIONALE_APCA_NIV3 == "II.1"  
+#     & TYPO_NATIONALE_APCA_NIV4 == "II.1.A" 
+#     & TYPO_NATIONALE_APCA_NIV5 == "II.1.A.b"  
+#     & TYPO_NATIONALE_APCA_NIV6 == "Exploitation_non_affectée_niv6" 
+#     & DEVSUR_compteur > 1 & DEVSUR_compteur <= 5
+#     ~   "II.1.A.b.ii",
+#     
+#     TRUE   ~ (TYPO_NATIONALE_APCA_NIV6)))
+
+####II.1.A.c. Exploitations avec pommes de terre
+
+DONNEES_BASE <- DONNEES_BASE %>%
+  mutate(TYPO_NATIONALE_APCA_NIV5 = ifelse((
+    TYPO_NATIONALE_APCA_NIV4 == "II.1.A" 
+    & TYPO_NATIONALE_APCA_NIV5 == "Exploitation_non_affectée_niv5"  
+    & ((CULTSUR_0600) >= 500 & CULTSUR_0212 < 1000 
+       & CULTSUR_0212 / CULTSUR_GC < 0.1
+       & ((CULTSUR_0504 + CULTSUR_0501) / (CULTSUR_GC)) < 0.2 
+       & CULTSUR_0301 < 1000 & (CULTSUR_0301 / CULTSUR_GC) < 0.1)),
+    "II.1.A.c",
+    TYPO_NATIONALE_APCA_NIV5))
+
+####II.1.A.c.i. Exploitations spécialisées pommes de terre
+
+# DONNEES_BASE <- DONNEES_BASE %>%
+#   mutate(TYPO_NATIONALE_APCA_NIV6 = case_when(
+#     TYPO_NATIONALE_APCA_NIV1 == "Sous base niveaux II III IV" 
+#     & TYPO_NATIONALE_APCA_NIV2 == "II" 
+#     & TYPO_NATIONALE_APCA_NIV3 == "II.1"  
+#     & TYPO_NATIONALE_APCA_NIV4 == "II.1.A" 
+#     & TYPO_NATIONALE_APCA_NIV5 == "II.1.A.c" 
+#     & TYPO_NATIONALE_APCA_NIV6 == "Exploitation_non_affectée_niv6" 
+#     & ((CULTSUR_0212 + CULTSUR_0504 + CULTSUR_0307 + CULTSUR_0308 + 
+#           CULTSUR_0309 + CULTSUR_0501 + CULTSUR_0301) == 0)
+#     ~  "II.1.A.c.i",
+#     
+#     TRUE   ~ (TYPO_NATIONALE_APCA_NIV6)))
+
+###### II.1.A.c.ii. Exploitations pommes de terre et autres cultures
+
+# DONNEES_BASE <- DONNEES_BASE %>%
+#   mutate(TYPO_NATIONALE_APCA_NIV6 = case_when(
+#     TYPO_NATIONALE_APCA_NIV1 == "Sous base niveaux II III IV" 
+#     & TYPO_NATIONALE_APCA_NIV2 == "II" 
+#     & TYPO_NATIONALE_APCA_NIV3 == "II.1" 
+#     & TYPO_NATIONALE_APCA_NIV4 == "II.1.A"
+#     & TYPO_NATIONALE_APCA_NIV5 == "II.1.A.c"
+#     & TYPO_NATIONALE_APCA_NIV6=="Exploitation_non_affectée_niv6"
+#     & ((CULTSUR_0212 + CULTSUR_0504 + CULTSUR_0307 + CULTSUR_0308 +
+#           CULTSUR_0309 + CULTSUR_0501 + CULTSUR_0301) >0)
+#     ~  "II.1.A.c.ii",
+#     
+#     TRUE   ~ (TYPO_NATIONALE_APCA_NIV6)))
+
+#####II.1.A.d. Exploitations avec plantes é fibres
+
+DONNEES_BASE <- DONNEES_BASE %>%
+  mutate(TYPO_NATIONALE_APCA_NIV5 = ifelse((
+    TYPO_NATIONALE_APCA_NIV4 == "II.1.A" 
+    & TYPO_NATIONALE_APCA_NIV5 == "Exploitation_non_affectée_niv5" 
+    & (CULTSUR_0212 >= 1000 | (CULTSUR_0212 >= 0.1*CULTSUR_GC))
+    & ((CULTSUR_0504 + CULTSUR_0501) < 0.2*CULTSUR_GC)
+    & CULTSUR_0301 < 1000 
+    & (CULTSUR_0301 < 0.1*CULTSUR_GC)
+    & CULTSUR_0600 < 500),
+    "II.1.A.d",
+    TYPO_NATIONALE_APCA_NIV5 ))
+
+######II.1.A.e. Exploitation avec autres cultures industrielles
+
+DONNEES_BASE <- DONNEES_BASE %>%
+  mutate(TYPO_NATIONALE_APCA_NIV5 = ifelse((
+    TYPO_NATIONALE_APCA_NIV4 == "II.1.A" 
+    & TYPO_NATIONALE_APCA_NIV5 == "Exploitation_non_affectée_niv5" 
+    &(((CULTSUR_0301 < 1000 & (CULTSUR_0301  < 0.1* CULTSUR_GC))
+       & ( (CULTSUR_0504+ CULTSUR_0501)  < 0.2* (CULTSUR_GC))
+       & (CULTSUR_0600 < 500)
+       & (CULTSUR_0212 < 1000 & CULTSUR_0212<0.1*CULTSUR_GC))
+      | ((CULTSUR_0301 >= 1000
+          | (CULTSUR_0301 ) >= 0.1* CULTSUR_GC)
+         & (((CULTSUR_0504+CULTSUR_0501)  >= 0.2*CULTSUR_GC)
+            | (CULTSUR_0600 >= 500)
+            | (CULTSUR_0212 >= 1000 | CULTSUR_0212>=0.1*CULTSUR_GC)))
+      | ((CULTSUR_0600 >= 500)
+         & ((CULTSUR_0301 >= 1000 | (CULTSUR_0301  >= 0.1*CULTSUR_GC))
+            | ((CULTSUR_0504+ CULTSUR_0501) >= 0.2 * (CULTSUR_GC))
+            | (CULTSUR_0212 >= 1000 | CULTSUR_0212>=0.1*CULTSUR_GC)))
+      | (((CULTSUR_0504+CULTSUR_0501) >= 0.2* (CULTSUR_GC) )
+         & ((CULTSUR_0301 >= 1000 | (CULTSUR_0301  >= 0.1* CULTSUR_GC))
+            | (CULTSUR_0600 >= 500)
+            | (CULTSUR_0212 >= 1000 | CULTSUR_0212>=0.1*CULTSUR_GC))) 
+      | ((CULTSUR_0212 >= 1000
+          | CULTSUR_0212>=0.1*CULTSUR_GC)
+         & ((CULTSUR_0301 >= 1000 | (CULTSUR_0301  >= 0.1* CULTSUR_GC))
+            | ((CULTSUR_0504+CULTSUR_0501)  >= 0.2* (CULTSUR_GC))
+            | (CULTSUR_0600 >= 500))))), 
+    "II.1.A.e",
+    TYPO_NATIONALE_APCA_NIV5))
+
+
+
+###### II.1.B. Exploitation COP
+
+DONNEES_BASE<-DONNEES_BASE %<>%    
+  mutate(TYPO_NATIONALE_APCA_NIV4=ifelse ((TYPO_NATIONALE_APCA_NIV3=="II.1" 
+                                           & TYPO_NATIONALE_APCA_NIV4=="Exploitation_non_affectée_niv4" 
+                                           &((CULTSUR_0301 < 1000 
+                                              & (CULTSUR_0301 < 0.1* CULTSUR_GC) 
+                                              & (CULTSUR_0600) < 500 
+                                              & CULTSUR_0212 < 1000
+                                              &  (CULTSUR_0305+  CULTSUR_0307+  CULTSUR_0308+  CULTSUR_0309+  CULTSUR_0504+  CULTSUR_0501)<150
+                                              & ( (CULTSUR_0301+  CULTSUR_0212+  CULTSUR_0305+  CULTSUR_0307+ 
+                                                     CULTSUR_0308+  CULTSUR_0309+  CULTSUR_0504+  CULTSUR_0501+  CULTSUR_0600) < 0.1*CULTSUR_GC) 
+                                              & (CULTSUR_0304+DEVSUR_01+CULTSUR_0302+CULTSUR_0303)==0
+                                              &( (CULTSUR_0406+  CULTSUR_0407+  CULTSUR_0408+  CULTSUR_1001+  CULTSUR_1002) < 0.2* CULTSUR_1200)))),
+                                          "II.1.B",
+                                          TYPO_NATIONALE_APCA_NIV4))
+
+######II.1.B.a.Exploitations sans irrigation 
+
+DONNEES_BASE<-DONNEES_BASE %<>%   
+  mutate(TYPO_NATIONALE_APCA_NIV5=ifelse( TYPO_NATIONALE_APCA_NIV4=="II.1.B" 
+                                          & TYPO_NATIONALE_APCA_NIV5=="Exploitation_non_affectée_niv5" 
+                                          & (((TERREVAL_501+  TERREVAL_502+  TERREVAL_503) < 0.1*CULTSUR_1200 )
+                                             |  (TERREVAL_501+  TERREVAL_502+  TERREVAL_503) < 1000),
+                                          "II.1.B.a",
+                                          TYPO_NATIONALE_APCA_NIV5))
+
+###### II.1.B.b. Exploitations partiellement irriguées
+
+DONNEES_BASE<-DONNEES_BASE %<>%   
+  mutate(TYPO_NATIONALE_APCA_NIV5=ifelse( (TYPO_NATIONALE_APCA_NIV4=="II.1.B" 
+                                           & TYPO_NATIONALE_APCA_NIV5=="Exploitation_non_affectée_niv5" 
+                                           & ((((TERREVAL_501+  TERREVAL_502+  TERREVAL_503) >= 0.1* CULTSUR_1200)  
+                                               & ( (TERREVAL_501+  TERREVAL_502+  TERREVAL_503) < 0.5* CULTSUR_1200) )
+                                              &  (TERREVAL_501+  TERREVAL_502+  TERREVAL_503) >= 1000)),
+                                          "II.1.B.b",
+                                          TYPO_NATIONALE_APCA_NIV5))
+
+####II.1.B.c. Exploitations irriguées
+
+DONNEES_BASE<-DONNEES_BASE %<>%   
+  mutate(TYPO_NATIONALE_APCA_NIV5=ifelse( (TYPO_NATIONALE_APCA_NIV4=="II.1.B" 
+                                           & TYPO_NATIONALE_APCA_NIV5=="Exploitation_non_affectée_niv5" 
+                                           & ((( (TERREVAL_501+  TERREVAL_502+  TERREVAL_503) >=0.5* CULTSUR_1200) )
+                                              &  (TERREVAL_501+  TERREVAL_502+  TERREVAL_503) >= 1000)),
+                                          "II.1.B.c",
+                                          TYPO_NATIONALE_APCA_NIV5))
+
+#####II.1.C. Exploitations COP et cultures spéciales
+
+DONNEES_BASE <- DONNEES_BASE %>%
+  mutate(TYPO_NATIONALE_APCA_NIV4 = ifelse((
+    TYPO_NATIONALE_APCA_NIV3 == "II.1" 
+    & TYPO_NATIONALE_APCA_NIV4 == "Exploitation_non_affectée_niv4"
+    & (CULTSUR_0304 + DEVSUR_01 + CULTSUR_0302 + CULTSUR_0303) > 0
+    & (((CULTSUR_0406 + CULTSUR_0407 + CULTSUR_0408 + CULTSUR_1001 + 
+           CULTSUR_1002) / CULTSUR_1200) < 0.2)),
+    "II.1.C",
+    TYPO_NATIONALE_APCA_NIV4))
+
+#####II.1.D.Exploitation COP et herbe
+
+DONNEES_BASE <- DONNEES_BASE %>%
+  mutate(TYPO_NATIONALE_APCA_NIV4 = ifelse((
+    TYPO_NATIONALE_APCA_NIV1 == "Sous base niveaux II III IV" 
+    & TYPO_NATIONALE_APCA_NIV2 == "II"
+    & TYPO_NATIONALE_APCA_NIV3 == "II.1" 
+    & TYPO_NATIONALE_APCA_NIV4 == "Exploitation_non_affectée_niv4"
+    & ((CULTSUR_0406 + CULTSUR_0407 + CULTSUR_0408 + CULTSUR_1001 +
+          CULTSUR_1002)  >= 0.2*CULTSUR_1200)),
+    "II.1.D",
+    TYPO_NATIONALE_APCA_NIV4))
+
+####II.2.Exploitations cultures pérennes ou spécialisées####
+
+DONNEES_BASE<-DONNEES_BASE %<>%   
+  mutate (TYPO_NATIONALE_APCA_NIV3= ifelse( ( TYPO_NATIONALE_APCA_NIV2=="II" 
+                                              & TYPO_NATIONALE_APCA_NIV3=="Exploitation_non_affectée_niv3" 
+                                              & ((CULTSUR_0801 >= 150
+                                                  |  (CULTSUR_0901+  CULTSUR_0908+  CULTSUR_0916+  CULTSUR_0924
+                                                      +  CULTSUR_0930+  CULTSUR_0806) >= 100
+                                                  |  (CULTSUR_0901+  CULTSUR_0908+  CULTSUR_0916+  CULTSUR_0924
+                                                      +  CULTSUR_0930+  CULTSUR_0806+ CULTSUR_0801) >= 150
+                                                  | CULTSUR_0913 >= 50
+                                                  |  (CULTSUR_0701+  CULTSUR_0704+  CULTSUR_0705) > 0
+                                                  |  (CULTSUR_0958+  CULTSUR_0807+  CULTSUR_0808) > 0 
+                                                  |  (CULTSUR_0506+  CULTSUR_0507) > 0
+                                                  |  CULTSUR_GC<0.05*CULTSUR_1200
+                                                  | DEVSUR_compteur > 5)
+                                                 & pb60 == 0)),
+                                            "II.2",
+                                            TYPO_NATIONALE_APCA_NIV3))
+
+####Remarque: critére pb60 = pbs champignons (les champignons et autres 
+#cultures particuliéres sont é traiter é part suivant les besoins des régions)
+
+### II.2.A. maraéchage dominant
+
+DONNEES_BASE<-DONNEES_BASE %<>%    
+  mutate (TYPO_NATIONALE_APCA_NIV4= ifelse( TYPO_NATIONALE_APCA_NIV3=="II.2" 
+                                            & TYPO_NATIONALE_APCA_NIV4=="Exploitation_non_affectée_niv4" 
+                                            & ( (pb28+  pb30)>=(0.66*PBSTOT_COEF17)),
+                                            "II.2.A",
+                                            TYPO_NATIONALE_APCA_NIV4))
+###II.2.A.a. Avec serres chauffées
+
+DONNEES_BASE<-DONNEES_BASE %<>%   
+  mutate( TYPO_NATIONALE_APCA_NIV5=ifelse(  TYPO_NATIONALE_APCA_NIV4=="II.2.A" 
+                                            & TYPO_NATIONALE_APCA_NIV5=="Exploitation_non_affectée_niv5" 
+                                            & ((CULTSUR_0504!=0) & (CULTSUR_0506 >= (0.2*CULTSUR_0504))),
+                                            "II.2.A.a",
+                                            TYPO_NATIONALE_APCA_NIV5))
+
+###II.2.A.a.i. circuits courts
+
+# DONNEES_BASE <- DONNEES_BASE %>%
+#   mutate(TYPO_NATIONALE_APCA_NIV6 = case_when(
+#     TYPO_NATIONALE_APCA_NIV1 == "Sous base niveaux II III IV" 
+#     & TYPO_NATIONALE_APCA_NIV2 == "II" 
+#     & TYPO_NATIONALE_APCA_NIV3 == "II.2" 
+#     & TYPO_NATIONALE_APCA_NIV4 == "II.2.A"
+#     & TYPO_NATIONALE_APCA_NIV5 == "II.2.A.a" 
+#     & TYPO_NATIONALE_APCA_NIV6 == "Exploitation_non_affectée_niv6"
+#     & (CIRCOUCA_404 =="4")
+#     ~  "II.2.A.a.i",
+#     
+#     TRUE  ~  (TYPO_NATIONALE_APCA_NIV6)))
+
+###II.2.A.a.ii. circuits mixtes
+
+# DONNEES_BASE <- DONNEES_BASE %>%
+#   mutate(TYPO_NATIONALE_APCA_NIV6 = case_when(
+#     TYPO_NATIONALE_APCA_NIV1 == "Sous base niveaux II III IV" 
+#     & TYPO_NATIONALE_APCA_NIV2 == "II"
+#     & TYPO_NATIONALE_APCA_NIV3 == "II.2" 
+#     & TYPO_NATIONALE_APCA_NIV4 == "II.2.A"
+#     & TYPO_NATIONALE_APCA_NIV5 == "II.2.A.a" 
+#     & TYPO_NATIONALE_APCA_NIV6 == "Exploitation_non_affectée_niv6"
+#     & (CIRCOUCA_404 == "3" |CIRCOUCA_404 == "2")
+#     ~  "II.2.A.a.ii",
+#     
+#     TRUE  ~   (TYPO_NATIONALE_APCA_NIV6)))
+
+####II.2.A.a.iii. Circuits longs
+
+# DONNEES_BASE <- DONNEES_BASE %>%
+#   mutate(TYPO_NATIONALE_APCA_NIV6 = case_when(
+#     TYPO_NATIONALE_APCA_NIV1 == "Sous base niveaux II III IV" 
+#     & TYPO_NATIONALE_APCA_NIV2 == "II"
+#     & TYPO_NATIONALE_APCA_NIV3 == "II.2" 
+#     & TYPO_NATIONALE_APCA_NIV4 == "II.2.A" 
+#     & TYPO_NATIONALE_APCA_NIV5 == "II.2.A.a" 
+#     & TYPO_NATIONALE_APCA_NIV6 == "Exploitation_non_affectée_niv6"
+#     & (CIRCOUCA_404 == "1"|CIRCOUCA_404 == " " |CIRCOUCA_404 == "0")
+#     ~   "II.2.A.a.iii",
+#     
+#     TRUE  ~  (TYPO_NATIONALE_APCA_NIV6)))
+
+###II.2.A.b. Avec serres froides (sans serres chauffées)
+
+DONNEES_BASE<-DONNEES_BASE %<>%   
+  mutate( TYPO_NATIONALE_APCA_NIV5=ifelse( (TYPO_NATIONALE_APCA_NIV4=="II.2.A" 
+                                            & TYPO_NATIONALE_APCA_NIV5=="Exploitation_non_affectée_niv5" 
+                                            &( (CULTSUR_0504!=0 & CULTSUR_0507 >= (0.2*CULTSUR_0504)) 
+                                               & CULTSUR_0506<(0.2*CULTSUR_0504) )), 
+                                           "II.2.A.b",
+                                           TYPO_NATIONALE_APCA_NIV5))
+
+###II.2.A.b.i. Circuits courts
+
+# DONNEES_BASE <- DONNEES_BASE %>%
+#   mutate(TYPO_NATIONALE_APCA_NIV6 = case_when(
+#     TYPO_NATIONALE_APCA_NIV1 == "Sous base niveaux II III IV" 
+#     & TYPO_NATIONALE_APCA_NIV2 == "II"
+#     & TYPO_NATIONALE_APCA_NIV3 == "II.2" 
+#     & TYPO_NATIONALE_APCA_NIV4 == "II.2.A"
+#     & TYPO_NATIONALE_APCA_NIV5 == "II.2.A.b" 
+#     & TYPO_NATIONALE_APCA_NIV6 == "Exploitation_non_affectée_niv6"
+#     & (CIRCOUCA_404 == "4")
+#     ~  "II.2.A.b.i",
+#     
+#     TRUE  ~  (TYPO_NATIONALE_APCA_NIV6)))
+
+####II.2.A.b.ii. Circuits mixtes
+
+# DONNEES_BASE <- DONNEES_BASE %>%
+#   mutate(TYPO_NATIONALE_APCA_NIV6 = case_when(
+#     TYPO_NATIONALE_APCA_NIV1 == "Sous base niveaux II III IV" 
+#     & TYPO_NATIONALE_APCA_NIV2 == "II"
+#     & TYPO_NATIONALE_APCA_NIV3 == "II.2" 
+#     & TYPO_NATIONALE_APCA_NIV4 == "II.2.A"
+#     & TYPO_NATIONALE_APCA_NIV5 == "II.2.A.b" 
+#     & TYPO_NATIONALE_APCA_NIV6=="Exploitation_non_affectée_niv6"
+#     & (CIRCOUCA_404 == "3"|CIRCOUCA_404 == "2")
+#     ~  "II.2.A.b.ii",
+#     
+#     TRUE  ~   (TYPO_NATIONALE_APCA_NIV6)))
+
+####II.2.A.b.iii. Circuits longs
+
+# DONNEES_BASE <- DONNEES_BASE %>%
+#   mutate(TYPO_NATIONALE_APCA_NIV6 = case_when(
+#     TYPO_NATIONALE_APCA_NIV1 == "Sous base niveaux II III IV" 
+#     & TYPO_NATIONALE_APCA_NIV2 == "II"
+#     & TYPO_NATIONALE_APCA_NIV3 == "II.2" 
+#     & TYPO_NATIONALE_APCA_NIV4 == "II.2.A"
+#     & TYPO_NATIONALE_APCA_NIV5 == "II.2.A.b" 
+#     & TYPO_NATIONALE_APCA_NIV6 == "Exploitation_non_affectée_niv6"
+#     & (CIRCOUCA_404 == "1"|CIRCOUCA_404 == " "|CIRCOUCA_404 == "0")
+#     ~  "II.2.A.b.iii",
+#     
+#     TRUE ~ (TYPO_NATIONALE_APCA_NIV6)))
+
+####II.2.A.c. Plein champs ou tunnel nantais
+
+DONNEES_BASE<-DONNEES_BASE %<>%   
+  mutate( TYPO_NATIONALE_APCA_NIV5=ifelse( ( TYPO_NATIONALE_APCA_NIV4=="II.2.A" 
+                                             & TYPO_NATIONALE_APCA_NIV5=="Exploitation_non_affectée_niv5" 
+                                             & (CULTSUR_0507< 0.2*CULTSUR_0504)  
+                                             & (CULTSUR_0506< 0.2*CULTSUR_0504)  ),
+                                           "II.2.A.c",
+                                           TYPO_NATIONALE_APCA_NIV5))
+
+####II.2.A.c.i. Circuits courts
+
+# DONNEES_BASE <- DONNEES_BASE %>%
+#   mutate(TYPO_NATIONALE_APCA_NIV6 = case_when(
+#     TYPO_NATIONALE_APCA_NIV1 == "Sous base niveaux II III IV" 
+#     & TYPO_NATIONALE_APCA_NIV2 == "II"
+#     & TYPO_NATIONALE_APCA_NIV3 == "II.2" 
+#     & TYPO_NATIONALE_APCA_NIV4 == "II.2.A"
+#     & TYPO_NATIONALE_APCA_NIV5 == "II.2.A.c" 
+#     & TYPO_NATIONALE_APCA_NIV6 == "Exploitation_non_affectée_niv6"
+#     & (CIRCOUCA_404 == "4")
+#     ~  "II.2.A.c.i",
+#     
+#     TRUE ~ (TYPO_NATIONALE_APCA_NIV6)))
+
+####II.2.A.c.ii. Circuits mixtes
+
+# DONNEES_BASE <- DONNEES_BASE %>%
+#   mutate(TYPO_NATIONALE_APCA_NIV6 = case_when(
+#     TYPO_NATIONALE_APCA_NIV1 == "Sous base niveaux II III IV" 
+#     & TYPO_NATIONALE_APCA_NIV2 == "II"
+#     & TYPO_NATIONALE_APCA_NIV3 == "II.2" 
+#     & TYPO_NATIONALE_APCA_NIV4 == "II.2.A" 
+#     & TYPO_NATIONALE_APCA_NIV5 == "II.2.A.c" 
+#     & TYPO_NATIONALE_APCA_NIV6 == "Exploitation_non_affectée_niv6"
+#     & (CIRCOUCA_404 == "3" |CIRCOUCA_404 == "2")
+#     ~  "II.2.A.c.ii",
+#     
+#     TRUE ~ (TYPO_NATIONALE_APCA_NIV6)))
+
+####II.2.A.c.iii. Circuits longs
+
+# DONNEES_BASE <- DONNEES_BASE %>%
+#   mutate(TYPO_NATIONALE_APCA_NIV6 = case_when(
+#     TYPO_NATIONALE_APCA_NIV1 == "Sous base niveaux II III IV" 
+#     & TYPO_NATIONALE_APCA_NIV2 == "II"
+#     & TYPO_NATIONALE_APCA_NIV3 == "II.2" 
+#     & TYPO_NATIONALE_APCA_NIV4 == "II.2.A"
+#     & TYPO_NATIONALE_APCA_NIV5 == "II.2.A.c" 
+#     & TYPO_NATIONALE_APCA_NIV6 == "Exploitation_non_affectée_niv6"
+#     & (CIRCOUCA_404 == "1"|CIRCOUCA_404 == " "|CIRCOUCA_404 == "0")
+#     ~  "II.2.A.c.iii",
+#     
+#     TRUE  ~ (TYPO_NATIONALE_APCA_NIV6)))
+
+####II.2.B. Arboriculture dominante
+
+DONNEES_BASE<-DONNEES_BASE %<>%    
+  mutate (TYPO_NATIONALE_APCA_NIV4=ifelse( TYPO_NATIONALE_APCA_NIV3=="II.2" 
+                                           & TYPO_NATIONALE_APCA_NIV4=="Exploitation_non_affectée_niv4" 
+                                           & ( ( pb45 + pb46+ pb47+  pb48+  pb49+  pb50+  pb55)>= (0.66*PBSTOT_COEF17)),
+                                           "II.2.B",
+                                           TYPO_NATIONALE_APCA_NIV4))
+
+
+####II.2.B.a. Exploitations arbo orientées fruits é pépins
+
+DONNEES_BASE<-DONNEES_BASE %<>%   
+  mutate(TYPO_NATIONALE_APCA_NIV5=ifelse(TYPO_NATIONALE_APCA_NIV4=="II.2.B" 
+                                         & TYPO_NATIONALE_APCA_NIV5=="Exploitation_non_affectée_niv5" 
+                                         & ((CULTSUR_0908 - CULTSUR_0910 - CULTSUR_0912) >= (0.7*(CULTSUR_0901+  CULTSUR_0908+  CULTSUR_0916+  CULTSUR_0930+  CULTSUR_0924+  CULTSUR_0806))),
+                                         "II.2.B.a",
+                                         TYPO_NATIONALE_APCA_NIV5))
+
+####II.2.B.a.i. Circuits courts
+
+# DONNEES_BASE <- DONNEES_BASE %>%
+#   mutate(TYPO_NATIONALE_APCA_NIV6 = case_when(
+#     TYPO_NATIONALE_APCA_NIV1 == "Sous base niveaux II III IV" 
+#     & TYPO_NATIONALE_APCA_NIV2 == "II"
+#     & TYPO_NATIONALE_APCA_NIV3 == "II.2" 
+#     & TYPO_NATIONALE_APCA_NIV4 == "II.2.B" 
+#     & TYPO_NATIONALE_APCA_NIV5 == "II.2.B.a" 
+#     & TYPO_NATIONALE_APCA_NIV6 == "Exploitation_non_affectée_niv6"
+#     & (CIRCOUCA_405 == "4")
+#     ~  "II.2.B.a.i",
+#     
+#     TRUE   ~ (TYPO_NATIONALE_APCA_NIV6)))
+
+####II.2.B.a.ii. Circuit mixte
+
+# DONNEES_BASE <- DONNEES_BASE %>%
+#   mutate(TYPO_NATIONALE_APCA_NIV6 = case_when(
+#     TYPO_NATIONALE_APCA_NIV1 == "Sous base niveaux II III IV" 
+#     & TYPO_NATIONALE_APCA_NIV2 == "II"
+#     & TYPO_NATIONALE_APCA_NIV3 == "II.2" 
+#     & TYPO_NATIONALE_APCA_NIV4 == "II.2.B" 
+#     & TYPO_NATIONALE_APCA_NIV5 == "II.2.B.a" 
+#     & TYPO_NATIONALE_APCA_NIV6 == "Exploitation_non_affectée_niv6"
+#     & (CIRCOUCA_405 == "3" |CIRCOUCA_405 == "2")
+#     ~  "II.2.B.a.ii",
+#     
+#     TRUE ~ (TYPO_NATIONALE_APCA_NIV6)))
+
+####II.2.B.a.iii. Circuits longs
+
+# DONNEES_BASE <- DONNEES_BASE %>%
+#   mutate(TYPO_NATIONALE_APCA_NIV6 = case_when(
+#     TYPO_NATIONALE_APCA_NIV1 == "Sous base niveaux II III IV" 
+#     & TYPO_NATIONALE_APCA_NIV2 == "II"
+#     & TYPO_NATIONALE_APCA_NIV3 == "II.2" 
+#     & TYPO_NATIONALE_APCA_NIV4 == "II.2.B" 
+#     & TYPO_NATIONALE_APCA_NIV5 == "II.2.B.a" 
+#     & TYPO_NATIONALE_APCA_NIV6 == "Exploitation_non_affectée_niv6"
+#     & (CIRCOUCA_405 == "1"| CIRCOUCA_405 == " "| CIRCOUCA_405 == "0")
+#     ~  "II.2.B.a.iii",
+#     
+#     TRUE  ~ (TYPO_NATIONALE_APCA_NIV6)))
+
+####II.2.B.b. Exploitations arbo orientées fruits é noyaux
+
+DONNEES_BASE<-DONNEES_BASE %>%   
+  mutate(TYPO_NATIONALE_APCA_NIV5=ifelse((TYPO_NATIONALE_APCA_NIV4=="II.2.B" 
+                                          & TYPO_NATIONALE_APCA_NIV5=="Exploitation_non_affectée_niv5" 
+                                          & ((CULTSUR_0901  - CULTSUR_0906) >= (0.7*(CULTSUR_0901+  CULTSUR_0908+  CULTSUR_0916+  CULTSUR_0930+  CULTSUR_0924+  CULTSUR_0806)))),
+                                         "II.2.B.b",
+                                         TYPO_NATIONALE_APCA_NIV5))
+
+####II.2.B.b.i. Circuits courts
+
+# DONNEES_BASE <- DONNEES_BASE %>%
+#   mutate(TYPO_NATIONALE_APCA_NIV6 = case_when(
+#     TYPO_NATIONALE_APCA_NIV1 == "Sous base niveaux II III IV" 
+#     & TYPO_NATIONALE_APCA_NIV2 == "II" 
+#     & TYPO_NATIONALE_APCA_NIV3 == "II.2" 
+#     & TYPO_NATIONALE_APCA_NIV4 == "II.2.B"
+#     & TYPO_NATIONALE_APCA_NIV5 == "II.2.B.b"
+#     & TYPO_NATIONALE_APCA_NIV6 == "Exploitation_non_affectée_niv6" 
+#     & (CIRCOUCA_405 =="4")
+#     ~ "II.2.B.b.i",
+#     
+#     TRUE ~ (TYPO_NATIONALE_APCA_NIV6)))
+
+####II.2.B.b.ii. Circuits mixtes
+
+# DONNEES_BASE <- DONNEES_BASE %>%
+#   mutate(TYPO_NATIONALE_APCA_NIV6 = case_when(
+#     TYPO_NATIONALE_APCA_NIV1 == "Sous base niveaux II III IV" 
+#     & TYPO_NATIONALE_APCA_NIV2 == "II"
+#     & TYPO_NATIONALE_APCA_NIV3 == "II.2" 
+#     & TYPO_NATIONALE_APCA_NIV4 == "II.2.B"
+#     & TYPO_NATIONALE_APCA_NIV5 == "II.2.B.b" 
+#     & TYPO_NATIONALE_APCA_NIV6 == "Exploitation_non_affectée_niv6"
+#     & (CIRCOUCA_405 == "3"|CIRCOUCA_405 == "2")
+#     ~  "II.2.B.b.ii",
+#     
+#     TRUE  ~ (TYPO_NATIONALE_APCA_NIV6)))
+
+####II.2.B.b.iii. Circuits longs
+
+# DONNEES_BASE <- DONNEES_BASE %>%
+#   mutate(TYPO_NATIONALE_APCA_NIV6 = case_when(
+#     TYPO_NATIONALE_APCA_NIV1 == "Sous base niveaux II III IV" 
+#     & TYPO_NATIONALE_APCA_NIV2 == "II"
+#     & TYPO_NATIONALE_APCA_NIV3 == "II.2" 
+#     & TYPO_NATIONALE_APCA_NIV4 == "II.2.B"
+#     & TYPO_NATIONALE_APCA_NIV5 == "II.2.B.b" 
+#     & TYPO_NATIONALE_APCA_NIV6 == "Exploitation_non_affectée_niv6"
+#     & (CIRCOUCA_405 == "1"|CIRCOUCA_405 == " "|CIRCOUCA_405 == "0")
+#     ~ "II.2.B.b.iii",
+#     
+#     TRUE  ~ (TYPO_NATIONALE_APCA_NIV6)))
+
+####II.2.B.c. Exploitations arbo orientées fruits é coques
+
+DONNEES_BASE<-DONNEES_BASE %<>%    
+  mutate( TYPO_NATIONALE_APCA_NIV5=ifelse( TYPO_NATIONALE_APCA_NIV4=="II.2.B" 
+                                           & TYPO_NATIONALE_APCA_NIV5=="Exploitation_non_affectée_niv5" 
+                                           & (CULTSUR_0930 >= (0.7*(CULTSUR_0901+  CULTSUR_0908+  CULTSUR_0916+  CULTSUR_0930+  CULTSUR_0924+  CULTSUR_0806))),
+                                           "II.2.B.c",
+                                           TYPO_NATIONALE_APCA_NIV5))
+
+####II.2.B.c.i. circuits courts
+
+# DONNEES_BASE <- DONNEES_BASE %>%
+#   mutate(TYPO_NATIONALE_APCA_NIV6 = case_when(
+#     TYPO_NATIONALE_APCA_NIV1 == "Sous base niveaux II III IV" 
+#     & TYPO_NATIONALE_APCA_NIV2 == "II"
+#     & TYPO_NATIONALE_APCA_NIV3 == "II.2" 
+#     & TYPO_NATIONALE_APCA_NIV4 == "II.2.B"
+#     & TYPO_NATIONALE_APCA_NIV5 == "II.2.B.c" 
+#     & TYPO_NATIONALE_APCA_NIV6 == "Exploitation_non_affectée_niv6"
+#     & (CIRCOUCA_405 == "4")
+#     ~  "II.2.B.c.i",
+#     
+#     TRUE ~ (TYPO_NATIONALE_APCA_NIV6)))
+
+#####II.2.B.c.ii. Circuits mixtes
+
+# DONNEES_BASE <- DONNEES_BASE %>%
+#   mutate(TYPO_NATIONALE_APCA_NIV6 = case_when(
+#     TYPO_NATIONALE_APCA_NIV1 == "Sous base niveaux II III IV" 
+#     & TYPO_NATIONALE_APCA_NIV2 == "II"
+#     & TYPO_NATIONALE_APCA_NIV3 == "II.2" 
+#     & TYPO_NATIONALE_APCA_NIV4 == "II.2.B" 
+#     & TYPO_NATIONALE_APCA_NIV5 == "II.2.B.c" 
+#     & TYPO_NATIONALE_APCA_NIV6 == "Exploitation_non_affectée_niv6"
+#     & (CIRCOUCA_405 == "3"| CIRCOUCA_405 == "2")
+#     ~  "II.2.B.c.ii",
+#     
+#     TRUE ~ (TYPO_NATIONALE_APCA_NIV6)))
+
+####II.2.B.c.iii. Circuits longs
+
+# DONNEES_BASE <- DONNEES_BASE %>%
+#   mutate(TYPO_NATIONALE_APCA_NIV6 = case_when(
+#     TYPO_NATIONALE_APCA_NIV1 == "Sous base niveaux II III IV" 
+#     & TYPO_NATIONALE_APCA_NIV2 == "II"
+#     & TYPO_NATIONALE_APCA_NIV3 == "II.2" 
+#     & TYPO_NATIONALE_APCA_NIV4 == "II.2.B" 
+#     & TYPO_NATIONALE_APCA_NIV5 == "II.2.B.c" 
+#     & TYPO_NATIONALE_APCA_NIV6 == "Exploitation_non_affectée_niv6"
+#     & (CIRCOUCA_405 == "1" | CIRCOUCA_405 == "" | CIRCOUCA_405 == "0")
+#     ~  "II.2.B.c.iii",
+#     
+#     TRUE  ~ (TYPO_NATIONALE_APCA_NIV6)))
+
+####II.2.B.d. Exploitations arbo orientées fruits pour la transformation
+
+#Remarque:Attention aux 0904 (prunes péches mirabelles pruneaux) 
+##qui suivant les régions peuvent étre considérés comme fruits pour 
+##la transformation  (é ajouter donc é la somme 0910 + 0912 + 0906)
+
+DONNEES_BASE <- DONNEES_BASE %>%
+  mutate(TYPO_NATIONALE_APCA_NIV5 = ifelse((
+    TYPO_NATIONALE_APCA_NIV1 == "Sous base niveaux II III IV" 
+    & TYPO_NATIONALE_APCA_NIV2 == "II" 
+    & TYPO_NATIONALE_APCA_NIV3 == "II.2" 
+    & TYPO_NATIONALE_APCA_NIV4 == "II.2.B"
+    & TYPO_NATIONALE_APCA_NIV5 == "Exploitation_non_affectée_niv5"
+    & ((CULTSUR_0910 + CULTSUR_0912 + CULTSUR_0906) / 
+         (CULTSUR_0901 + CULTSUR_0908 + CULTSUR_0916 + CULTSUR_0930 + 
+            CULTSUR_0924 +  CULTSUR_0806)) >= 0.7),
+    "II.2.B.d",
+    TYPO_NATIONALE_APCA_NIV5))
+
+#####II.2.B.d.i. Avec transformation sur l'exploitation
+
+# DONNEES_BASE <- DONNEES_BASE %>%
+#   mutate(TYPO_NATIONALE_APCA_NIV6 = case_when(
+#     TYPO_NATIONALE_APCA_NIV1 == "Sous base niveaux II III IV" 
+#     & TYPO_NATIONALE_APCA_NIV2 == "II"
+#     & TYPO_NATIONALE_APCA_NIV3 == "II.2" 
+#     & TYPO_NATIONALE_APCA_NIV4 == "II.2.B" 
+#     & TYPO_NATIONALE_APCA_NIV5 == "II.2.B.d" 
+#     & TYPO_NATIONALE_APCA_NIV6 == "Exploitation_non_affectée_niv6"
+#     & (DIVACTEXP_202 == "1"| DIVACTAUT_202 == "1")
+#     ~  "II.2.B.d.i",
+#     
+#     TRUE  ~ (TYPO_NATIONALE_APCA_NIV6)))
+
+#####II.2.B.d.ii. Avec transformation hors exploitation
+
+# DONNEES_BASE <- DONNEES_BASE %>%
+#   mutate(TYPO_NATIONALE_APCA_NIV6 = case_when(
+#     TYPO_NATIONALE_APCA_NIV1 == "Sous base niveaux II III IV" 
+#     & TYPO_NATIONALE_APCA_NIV2 == "II"
+#     & TYPO_NATIONALE_APCA_NIV3 == "II.2" 
+#     & TYPO_NATIONALE_APCA_NIV4 == "II.2.B"
+#     & TYPO_NATIONALE_APCA_NIV5 == "II.2.B.d" 
+#     & TYPO_NATIONALE_APCA_NIV6 == "Exploitation_non_affectée_niv6"
+#     & ((DIVACTEXP_202 == " " | DIVACTEXP_202 == "0") 
+#        & (DIVACTAUT_202 == " " | DIVACTAUT_202 == "0"))
+#     ~  "II.2.B.d.ii",
+#     
+#     TRUE  ~ (TYPO_NATIONALE_APCA_NIV6)))
+
+###### II.2.B.e. Exploitations arbo orientées agrumes
+
+#Remarque: Attention aux 0904 (prunes péches mirabelles pruneaux) 
+#qui suivant les régions peuvent étre considérés comme fruits pour 
+##la transformation (é soustraire donc de 0901)
+
+DONNEES_BASE <- DONNEES_BASE %>%
+  mutate(TYPO_NATIONALE_APCA_NIV5 = ifelse((
+    TYPO_NATIONALE_APCA_NIV1 == "Sous base niveaux II III IV" 
+    & TYPO_NATIONALE_APCA_NIV2 == "II"
+    & TYPO_NATIONALE_APCA_NIV3 == "II.2" 
+    & TYPO_NATIONALE_APCA_NIV4 == "II.2.B" 
+    & TYPO_NATIONALE_APCA_NIV5 == "Exploitation_non_affectée_niv5"
+    & (CULTSUR_0916  >= 0.7*(CULTSUR_0901 + CULTSUR_0908 + CULTSUR_0916 + 
+                               CULTSUR_0930 + CULTSUR_0924 +CULTSUR_0806))),
+    "II.2.B.e",
+    TYPO_NATIONALE_APCA_NIV5))
+
+#### II.2.B.e.i. Circuits courts
+
+# DONNEES_BASE <- DONNEES_BASE %>%
+#   mutate(TYPO_NATIONALE_APCA_NIV6 = case_when(
+#     TYPO_NATIONALE_APCA_NIV1 == "Sous base niveaux II III IV" 
+#     & TYPO_NATIONALE_APCA_NIV2 == "II"
+#     & TYPO_NATIONALE_APCA_NIV3 == "II.2" 
+#     & TYPO_NATIONALE_APCA_NIV4 == "II.2.B" 
+#     & TYPO_NATIONALE_APCA_NIV5 == "II.2.B.e" 
+#     & TYPO_NATIONALE_APCA_NIV6 == "Exploitation_non_affectée_niv6"
+#     & (CIRCOUCA_405 == "4")
+#     ~  "II.2.B.e.i",
+#     
+#     TRUE   ~ (TYPO_NATIONALE_APCA_NIV6)))
+
+####II.2.B.e.ii. Circuits mixtes
+
+# DONNEES_BASE <- DONNEES_BASE %>%
+#   mutate(TYPO_NATIONALE_APCA_NIV6 = case_when(
+#     TYPO_NATIONALE_APCA_NIV1 == "Sous base niveaux II III IV" 
+#     & TYPO_NATIONALE_APCA_NIV2 == "II"
+#     & TYPO_NATIONALE_APCA_NIV3 == "II.2" 
+#     & TYPO_NATIONALE_APCA_NIV4 == "II.2.B"
+#     & TYPO_NATIONALE_APCA_NIV5 == "II.2.B.e" 
+#     & TYPO_NATIONALE_APCA_NIV6 == "Exploitation_non_affectée_niv6"
+#     & (CIRCOUCA_405 == "3"| CIRCOUCA_405 == "2")
+#     ~ "II.2.B.e.ii",
+#     
+#     TRUE  ~ (TYPO_NATIONALE_APCA_NIV6)))
+
+####II.2.B.e.iii. Circuits longs
+
+# DONNEES_BASE <- DONNEES_BASE %>%
+#   mutate(TYPO_NATIONALE_APCA_NIV6 = case_when(
+#     TYPO_NATIONALE_APCA_NIV1 == "Sous base niveaux II III IV" 
+#     & TYPO_NATIONALE_APCA_NIV2 == "II"
+#     & TYPO_NATIONALE_APCA_NIV3 == "II.2" 
+#     & TYPO_NATIONALE_APCA_NIV4 == "II.2.B"
+#     & TYPO_NATIONALE_APCA_NIV5 == "II.2.B.e" 
+#     & TYPO_NATIONALE_APCA_NIV6 == "Exploitation_non_affectée_niv6"
+#     & (CIRCOUCA_405 == "1" | CIRCOUCA_405 == "" | CIRCOUCA_405 == "0")
+#     ~  "II.2.B.e.iii",
+#     
+#     TRUE  ~ (TYPO_NATIONALE_APCA_NIV6)))
+
+#####II.2.B.f. Exploitations arbo mixtes
+
+DONNEES_BASE <- DONNEES_BASE %>%
+  mutate(TYPO_NATIONALE_APCA_NIV5 = ifelse((
+    TYPO_NATIONALE_APCA_NIV1 == "Sous base niveaux II III IV" 
+    & TYPO_NATIONALE_APCA_NIV2 == "II"
+    & TYPO_NATIONALE_APCA_NIV3 == "II.2"  
+    & TYPO_NATIONALE_APCA_NIV4 == "II.2.B" 
+    & TYPO_NATIONALE_APCA_NIV5 == "Exploitation_non_affectée_niv5"
+    & (((CULTSUR_0908 - CULTSUR_0910 - CULTSUR_0912)  < 0.7* 
+          (CULTSUR_0901 + CULTSUR_0908 + CULTSUR_0916 + CULTSUR_0930 + 
+             CULTSUR_0924 + CULTSUR_0806)) )
+    & (((CULTSUR_0901 - CULTSUR_0906)  < 0.7* 
+          (CULTSUR_0901 + CULTSUR_0908 + CULTSUR_0916 + CULTSUR_0930 + 
+             CULTSUR_0924 + CULTSUR_0806)) )
+    & (CULTSUR_0930  < 0.7*
+         (CULTSUR_0901 + CULTSUR_0908 + CULTSUR_0916 + CULTSUR_0930 + 
+            CULTSUR_0924 + CULTSUR_0806))
+    & (((CULTSUR_0910 + CULTSUR_0912 + CULTSUR_0906)  < 0.7 *
+          (CULTSUR_0901 + CULTSUR_0908 + CULTSUR_0916 + CULTSUR_0930 +
+             CULTSUR_0924 + CULTSUR_0806)))
+    & ((CULTSUR_0916  < 0.7*
+          (CULTSUR_0901 + CULTSUR_0908 + CULTSUR_0916 + CULTSUR_0930 + 
+             CULTSUR_0924 + CULTSUR_0806)))),
+    "II.2.B.f",
+    TYPO_NATIONALE_APCA_NIV5))
+
+####II.2.B.f.i. Circuits courts
+
+# DONNEES_BASE <- DONNEES_BASE %>%
+#   mutate(TYPO_NATIONALE_APCA_NIV6 = case_when(
+#     TYPO_NATIONALE_APCA_NIV1 == "Sous base niveaux II III IV" 
+#     & TYPO_NATIONALE_APCA_NIV2 == "II"
+#     & TYPO_NATIONALE_APCA_NIV3 == "II.2" 
+#     & TYPO_NATIONALE_APCA_NIV4 == "II.2.B" 
+#     & TYPO_NATIONALE_APCA_NIV5 == "II.2.B.f" 
+#     & TYPO_NATIONALE_APCA_NIV6 == "Exploitation_non_affectée_niv6"
+#     & (CIRCOUCA_405 == "4")
+#     ~ "II.2.B.f.i",
+#     
+#     TRUE    ~ (TYPO_NATIONALE_APCA_NIV6)))
+
+####II.2.B.f.ii. Circuit mixtes
+
+# DONNEES_BASE <- DONNEES_BASE %>%
+#   mutate(TYPO_NATIONALE_APCA_NIV6 = case_when(
+#     TYPO_NATIONALE_APCA_NIV1 == "Sous base niveaux II III IV" 
+#     & TYPO_NATIONALE_APCA_NIV2 == "II"
+#     & TYPO_NATIONALE_APCA_NIV3 == "II.2" 
+#     & TYPO_NATIONALE_APCA_NIV4 == "II.2.B" 
+#     & TYPO_NATIONALE_APCA_NIV5 == "II.2.B.f" 
+#     & TYPO_NATIONALE_APCA_NIV6 == "Exploitation_non_affectée_niv6"
+#     & (CIRCOUCA_405 == "3" |CIRCOUCA_405 == "2")
+#     ~ "II.2.B.f.ii",
+#     
+#     TRUE  ~ (TYPO_NATIONALE_APCA_NIV6)))
+
+####II.2.B.f.iii. Circuits longs
+
+# DONNEES_BASE <- DONNEES_BASE %>%
+#   mutate(TYPO_NATIONALE_APCA_NIV6 = case_when(
+#     TYPO_NATIONALE_APCA_NIV1 == "Sous base niveaux II III IV" 
+#     & TYPO_NATIONALE_APCA_NIV2 == "II"
+#     & TYPO_NATIONALE_APCA_NIV3 == "II.2" 
+#     & TYPO_NATIONALE_APCA_NIV4 == "II.2.B"
+#     & TYPO_NATIONALE_APCA_NIV5 == "II.2.B.f" 
+#     & TYPO_NATIONALE_APCA_NIV6 == "Exploitation_non_affectée_niv6"
+#     & (CIRCOUCA_405 == "1" | CIRCOUCA_405 == ""| CIRCOUCA_405 == "0")
+#     ~ "II.2.B.f.iii",
+#     
+#     TRUE  ~ (TYPO_NATIONALE_APCA_NIV6)))
+
+####II.2.C.Horticulture / pépiniére dominantes
+
+DONNEES_BASE <- DONNEES_BASE %>%
+  mutate(TYPO_NATIONALE_APCA_NIV4 = case_when(
+    TYPO_NATIONALE_APCA_NIV1 == "Sous base niveaux II III IV" 
+    & TYPO_NATIONALE_APCA_NIV2 == "II"
+    & TYPO_NATIONALE_APCA_NIV3 == "II.2" 
+    & TYPO_NATIONALE_APCA_NIV4 == "Exploitation_non_affectée_niv4" 
+    & ((pb31 + pb32 + pb57)  >= 0.66* PBSTOT_COEF17) 
+    ~ "II.2.C",
+    
+    TRUE   ~ (TYPO_NATIONALE_APCA_NIV4)))
+
+
+####II.2.C.a.Pépiniériste
+
+DONNEES_BASE <- DONNEES_BASE %>%
+  mutate(TYPO_NATIONALE_APCA_NIV5 = case_when(
+    TYPO_NATIONALE_APCA_NIV1 == "Sous base niveaux II III IV" 
+    & TYPO_NATIONALE_APCA_NIV2 == "II"
+    & TYPO_NATIONALE_APCA_NIV3 == "II.2" 
+    & TYPO_NATIONALE_APCA_NIV4 == "II.2.C"
+    & TYPO_NATIONALE_APCA_NIV5 == "Exploitation_non_affectée_niv5" 
+    & ((CULTSUR_0958 > 0
+        & (CULTSUR_0807 + CULTSUR_0808) == 0) 
+       & (CULTSUR_0701 + CULTSUR_0704 + CULTSUR_0705) == 0)
+    ~ "II.2.C.a",
+    
+    TRUE    ~ (TYPO_NATIONALE_APCA_NIV5)))
+
+#####II.2.C.a.i.Circuits courts
+
+# DONNEES_BASE <- DONNEES_BASE %>%
+#   mutate(TYPO_NATIONALE_APCA_NIV6 = case_when(
+#     TYPO_NATIONALE_APCA_NIV1 == "Sous base niveaux II III IV" 
+#     & TYPO_NATIONALE_APCA_NIV2 == "II"
+#     & TYPO_NATIONALE_APCA_NIV3 == "II.2" 
+#     & TYPO_NATIONALE_APCA_NIV4 == "II.2.C" 
+#     & TYPO_NATIONALE_APCA_NIV5 == "II.2.C.a" 
+#     & TYPO_NATIONALE_APCA_NIV6 == "Exploitation_non_affectée_niv6"
+#     & (CIRCOUCA_407 == "4")
+#     ~ "II.2.C.a.i",
+#     
+#     TRUE    ~ (TYPO_NATIONALE_APCA_NIV6)))
+
+####II.2.C.a.ii.Circuits mixtes
+
+# DONNEES_BASE <- DONNEES_BASE %>%
+#   mutate(TYPO_NATIONALE_APCA_NIV6 = case_when(
+#     TYPO_NATIONALE_APCA_NIV1 == "Sous base niveaux II III IV" 
+#     & TYPO_NATIONALE_APCA_NIV2 == "II"
+#     & TYPO_NATIONALE_APCA_NIV3 == "II.2" 
+#     & TYPO_NATIONALE_APCA_NIV4 == "II.2.C"
+#     & TYPO_NATIONALE_APCA_NIV5 == "II.2.C.a" 
+#     & TYPO_NATIONALE_APCA_NIV6 == "Exploitation_non_affectée_niv6"
+#     & (CIRCOUCA_407 == "3" | CIRCOUCA_407 == "2")
+#     ~ "II.2.C.a.ii",
+#     
+#     TRUE    ~ (TYPO_NATIONALE_APCA_NIV6)))
+
+####II.2.C.a.iii.Circuits longs
+
+# DONNEES_BASE <- DONNEES_BASE %>%
+#   mutate(TYPO_NATIONALE_APCA_NIV6 = case_when(
+#     TYPO_NATIONALE_APCA_NIV1 == "Sous base niveaux II III IV" 
+#     & TYPO_NATIONALE_APCA_NIV2 == "II"
+#     & TYPO_NATIONALE_APCA_NIV3 == "II.2" 
+#     & TYPO_NATIONALE_APCA_NIV4 == "II.2.C"
+#     & TYPO_NATIONALE_APCA_NIV5 == "II.2.C.a" 
+#     & TYPO_NATIONALE_APCA_NIV6 == "Exploitation_non_affectée_niv6"
+#     & (CIRCOUCA_407 == "1" | CIRCOUCA_407 == "0" | CIRCOUCA_407 == " ")
+#     ~ "II.2.C.a.iii",
+#     
+#     TRUE    ~ (TYPO_NATIONALE_APCA_NIV6)))
+
+####II.2.C.b.Horticulteur
+
+DONNEES_BASE <- DONNEES_BASE %>%
+  mutate(TYPO_NATIONALE_APCA_NIV5 = ifelse((
+    TYPO_NATIONALE_APCA_NIV4 == "II.2.C" 
+    & TYPO_NATIONALE_APCA_NIV5 == "Exploitation_non_affectée_niv5" 
+    & (CULTSUR_0958 == 0)
+    & (CULTSUR_0701 + CULTSUR_0704 + CULTSUR_0705) > 0
+    & (CULTSUR_0807 + CULTSUR_0808) == 0),
+    "II.2.C.b",
+    TYPO_NATIONALE_APCA_NIV5))
+
+####II.2.C.b.i.Circuits courts
+
+# DONNEES_BASE <- DONNEES_BASE %>%
+#   mutate(TYPO_NATIONALE_APCA_NIV6 = case_when(
+#     TYPO_NATIONALE_APCA_NIV1 == "Sous base niveaux II III IV" 
+#     & TYPO_NATIONALE_APCA_NIV2 == "II"
+#     & TYPO_NATIONALE_APCA_NIV3 == "II.2" 
+#     & TYPO_NATIONALE_APCA_NIV4 == "II.2.C" 
+#     & TYPO_NATIONALE_APCA_NIV5 == "II.2.C.b" 
+#     & TYPO_NATIONALE_APCA_NIV6 == "Exploitation_non_affectée_niv6"
+#     & (CIRCOUCA_407 == "4" |CIRCOUCA_407 == "3" )
+#     ~ "II.2.C.b.i",
+#     
+#     TRUE    ~ (TYPO_NATIONALE_APCA_NIV6)))
+
+#####II.2.C.b.ii.Circuits mixtes
+
+# DONNEES_BASE <- DONNEES_BASE %>%
+#   mutate(TYPO_NATIONALE_APCA_NIV6 = case_when(
+#     TYPO_NATIONALE_APCA_NIV1 == "Sous base niveaux II III IV" 
+#     & TYPO_NATIONALE_APCA_NIV2 == "II"
+#     & TYPO_NATIONALE_APCA_NIV3 == "II.2" 
+#     & TYPO_NATIONALE_APCA_NIV4 == "II.2.C" 
+#     & TYPO_NATIONALE_APCA_NIV5 == "II.2.C.b" 
+#     & TYPO_NATIONALE_APCA_NIV6 == "Exploitation_non_affectée_niv6"
+#     & (CIRCOUCA_407 == "3" |CIRCOUCA_407 == "2")
+#     ~ "II.2.C.b.ii",
+#     
+#     TRUE   ~ (TYPO_NATIONALE_APCA_NIV6)))
+
+####II.2.C.b.iii.Circuits longs
+
+# DONNEES_BASE <- DONNEES_BASE %>%
+#   mutate(TYPO_NATIONALE_APCA_NIV6 = case_when(
+#     TYPO_NATIONALE_APCA_NIV1 == "Sous base niveaux II III IV" 
+#     & TYPO_NATIONALE_APCA_NIV2 == "II"
+#     & TYPO_NATIONALE_APCA_NIV3 == "II.2" 
+#     & TYPO_NATIONALE_APCA_NIV4 == "II.2.C" 
+#     & TYPO_NATIONALE_APCA_NIV5 == "II.2.C.b" 
+#     & TYPO_NATIONALE_APCA_NIV6 == "Exploitation_non_affectée_niv6"
+#     & (CIRCOUCA_407 == "1" | CIRCOUCA_407 == "0" | CIRCOUCA_407 == " ")
+#     ~ "II.2.C.b.iii",
+#     
+#     TRUE   ~ (TYPO_NATIONALE_APCA_NIV6)))
+
+####II.2.C.c.Mixte pépiniériste et horticulteur
+
+DONNEES_BASE <- DONNEES_BASE %>%
+  mutate(TYPO_NATIONALE_APCA_NIV5 = case_when(
+    TYPO_NATIONALE_APCA_NIV1 == "Sous base niveaux II III IV" 
+    & TYPO_NATIONALE_APCA_NIV2 == "II" 
+    & TYPO_NATIONALE_APCA_NIV3 == "II.2" 
+    & TYPO_NATIONALE_APCA_NIV4 == "II.2.C"
+    & TYPO_NATIONALE_APCA_NIV5 == "Exploitation_non_affectée_niv5" 
+    & ((CULTSUR_0958 > 0) & ((CULTSUR_0807 + CULTSUR_0808) == 0)) 
+    & ((CULTSUR_0701 + CULTSUR_0704 + CULTSUR_0705) > 0)
+    ~ "II.2.C.c",
+    
+    TRUE    ~ (TYPO_NATIONALE_APCA_NIV5)))
+
+####II.2.C.d.Pépiniéres viticoles
+
+DONNEES_BASE <- DONNEES_BASE %>%
+  mutate(TYPO_NATIONALE_APCA_NIV5 = case_when(
+    TYPO_NATIONALE_APCA_NIV1 == "Sous base niveaux II III IV" 
+    & TYPO_NATIONALE_APCA_NIV2 == "II"
+    & TYPO_NATIONALE_APCA_NIV3 == "II.2" 
+    & TYPO_NATIONALE_APCA_NIV4 == "II.2.C"
+    & TYPO_NATIONALE_APCA_NIV5 == "Exploitation_non_affectée_niv5" 
+    & ((CULTSUR_0807 + CULTSUR_0808) > 0)
+    & ((CULTSUR_0701 + CULTSUR_0704 + CULTSUR_0705) == 0) 
+    & (CULTSUR_0958 == 0)
+    ~ "II.2.C.d",
+    
+    TRUE    ~ (TYPO_NATIONALE_APCA_NIV5)))
+
+####II.2.C.e.Combinaisons viti-pépi, viti-horti, viti-horti-pépi
+
+DONNEES_BASE <- DONNEES_BASE %>%
+  mutate(TYPO_NATIONALE_APCA_NIV5 = case_when(
+    TYPO_NATIONALE_APCA_NIV1 == "Sous base niveaux II III IV" 
+    & TYPO_NATIONALE_APCA_NIV2 == "II"
+    & TYPO_NATIONALE_APCA_NIV3 == "II.2" 
+    & TYPO_NATIONALE_APCA_NIV4 == "II.2.C"
+    & TYPO_NATIONALE_APCA_NIV5 == "Exploitation_non_affectée_niv5"
+    & ((((CULTSUR_0807 + CULTSUR_0808) > 0)
+        & ((CULTSUR_0701 + CULTSUR_0704 + CULTSUR_0705) == 0) 
+        & (CULTSUR_0958 > 0))| (((CULTSUR_0807 + CULTSUR_0808) > 0)
+                                & ((CULTSUR_0701 +CULTSUR_0704 +CULTSUR_0705) > 0) 
+                                & (CULTSUR_0958 == 0))| (((CULTSUR_0807 + CULTSUR_0808) > 0)
+                                                         & ((CULTSUR_0701 + CULTSUR_0704 + CULTSUR_0705) > 0) 
+                                                         & (CULTSUR_0958 > 0)))
+    ~ "II.2.C.e",
+    
+    TRUE   ~ (TYPO_NATIONALE_APCA_NIV5)))
+
+####II.2.C.c.i.Circuits courts
+
+# DONNEES_BASE <- DONNEES_BASE %>%
+#   mutate(TYPO_NATIONALE_APCA_NIV6 = case_when(
+#     TYPO_NATIONALE_APCA_NIV1 == "Sous base niveaux II III IV" 
+#     & TYPO_NATIONALE_APCA_NIV2 == "II"
+#     & TYPO_NATIONALE_APCA_NIV3 == "II.2" 
+#     & TYPO_NATIONALE_APCA_NIV4 == "II.2.C"
+#     & TYPO_NATIONALE_APCA_NIV5 == "II.2.C.c" 
+#     & TYPO_NATIONALE_APCA_NIV6 == "Exploitation_non_affectée_niv6"
+#     & (CIRCOUCA_407 == "4")
+#     ~ "II.2.C.c.i",
+#     
+#     TRUE   ~ (TYPO_NATIONALE_APCA_NIV6)))
+
+####II.2.C.c.ii.Circuits mixtes
+
+# DONNEES_BASE <- DONNEES_BASE %>%
+#   mutate(TYPO_NATIONALE_APCA_NIV6 = case_when(
+#     TYPO_NATIONALE_APCA_NIV1 == "Sous base niveaux II III IV" 
+#     & TYPO_NATIONALE_APCA_NIV2 == "II"
+#     & TYPO_NATIONALE_APCA_NIV3 == "II.2" 
+#     & TYPO_NATIONALE_APCA_NIV4 == "II.2.C"
+#     & TYPO_NATIONALE_APCA_NIV5 == "II.2.C.c" 
+#     & TYPO_NATIONALE_APCA_NIV6 == "Exploitation_non_affectée_niv6"
+#     & (CIRCOUCA_407== "3" | CIRCOUCA_407== "2")
+#     ~ "II.2.C.c.ii",
+#     
+#     TRUE   ~ (TYPO_NATIONALE_APCA_NIV6)))
+
+####II.2.C.c.iii.Circuits longs
+
+# DONNEES_BASE <- DONNEES_BASE %>%
+#   mutate(TYPO_NATIONALE_APCA_NIV6 = case_when(
+#     TYPO_NATIONALE_APCA_NIV1 == "Sous base niveaux II III IV" 
+#     & TYPO_NATIONALE_APCA_NIV2 == "II"
+#     & TYPO_NATIONALE_APCA_NIV3 == "II.2" 
+#     & TYPO_NATIONALE_APCA_NIV4 == "II.2.C"
+#     & TYPO_NATIONALE_APCA_NIV5 == "II.2.C.c" 
+#     & TYPO_NATIONALE_APCA_NIV6 == "Exploitation_non_affectée_niv6"
+#     & (CIRCOUCA_407 == "1"| CIRCOUCA_407 == "0" | CIRCOUCA_407 == " ")
+#     ~ "II.2.C.c.iii",
+#     
+#     TRUE   ~ (TYPO_NATIONALE_APCA_NIV6)))
+
+####II.2.D.Viticulture dominante
+
+DONNEES_BASE<-DONNEES_BASE %<>%   
+  mutate(TYPO_NATIONALE_APCA_NIV4= ifelse(  TYPO_NATIONALE_APCA_NIV3=="II.2" 
+                                            & TYPO_NATIONALE_APCA_NIV4=="Exploitation_non_affectée_niv4" 
+                                            &  ( (pb53a+  pb53b+  pb54) >= (0.66*PBSTOT_COEF17)),
+                                            "II.2.D",
+                                            TYPO_NATIONALE_APCA_NIV4))
+
+
+####II.2.D.a.Production de raisins à destination coop négoce
+
+DONNEES_BASE<-DONNEES_BASE %<>%    
+  mutate(TYPO_NATIONALE_APCA_NIV5=ifelse (TYPO_NATIONALE_APCA_NIV4=="II.2.D" 
+                                          & TYPO_NATIONALE_APCA_NIV5=="Exploitation_non_affectée_niv5"
+                                          & (CVI_302!=0 | CVI_301+  CVI_302+  CVI_303!=0)
+                                          & (CVI_302 >=  0.8*(CVI_301+  CVI_302+  CVI_303)),
+                                          "II.2.D.a",
+                                          TYPO_NATIONALE_APCA_NIV5))
+
+####II.2.D.b.Production de moéts à destination coop négoce
+
+DONNEES_BASE<-DONNEES_BASE %<>%    
+  mutate(TYPO_NATIONALE_APCA_NIV5=ifelse (TYPO_NATIONALE_APCA_NIV4=="II.2.D" 
+                                          & TYPO_NATIONALE_APCA_NIV5=="Exploitation_non_affectée_niv5"
+                                          & (CVI_303!=0 | CVI_301+  CVI_302+  CVI_303!=0)
+                                          & (CVI_303 >= (0.6*(CVI_301+  CVI_302+  CVI_303))),
+                                          "II.2.D.b",
+                                          TYPO_NATIONALE_APCA_NIV5))
+
+####II.2.D.c.Production de vin
+
+DONNEES_BASE<-DONNEES_BASE %<>%    
+  mutate(TYPO_NATIONALE_APCA_NIV5=ifelse (TYPO_NATIONALE_APCA_NIV4=="II.2.D" 
+                                          & TYPO_NATIONALE_APCA_NIV5=="Exploitation_non_affectée_niv5"
+                                          & (CVI_301!=0 | CVI_301+  CVI_302+  CVI_303!=0)
+                                          & (CVI_301 >=  (0.6*(CVI_301+  CVI_302+  CVI_303))),
+                                          "II.2.D.c",
+                                          TYPO_NATIONALE_APCA_NIV5))
+####II.2.D.c.i.Production de vin en vrac é destination négoce
+
+# DONNEES_BASE <- DONNEES_BASE %>%
+#   mutate(TYPO_NATIONALE_APCA_NIV6 = case_when(
+#     TYPO_NATIONALE_APCA_NIV1 == "Sous base niveaux II III IV" 
+#     & TYPO_NATIONALE_APCA_NIV2 == "II"
+#     & TYPO_NATIONALE_APCA_NIV3 == "II.2" 
+#     & TYPO_NATIONALE_APCA_NIV4 == "II.2.D"
+#     & TYPO_NATIONALE_APCA_NIV5 == "II.2.D.c" 
+#     & TYPO_NATIONALE_APCA_NIV6 == "Exploitation_non_affectée_niv6"
+#     & ((VITICOVQ_403) / (VITICOQ_408) >= 0.6)
+#     ~ "II.2.D.c.i",
+#     
+#     TRUE    ~ (TYPO_NATIONALE_APCA_NIV6)))
+
+####II.2.D.c.ii.Production de vin en bouteille
+
+# DONNEES_BASE <- DONNEES_BASE %>%
+#   mutate(TYPO_NATIONALE_APCA_NIV6 = case_when(
+#     TYPO_NATIONALE_APCA_NIV1 == "Sous base niveaux II III IV" 
+#     & TYPO_NATIONALE_APCA_NIV2 == "II"
+#     & TYPO_NATIONALE_APCA_NIV3 == "II.2" 
+#     & TYPO_NATIONALE_APCA_NIV4 == "II.2.D" 
+#     & TYPO_NATIONALE_APCA_NIV5 == "II.2.D.c" 
+#     & TYPO_NATIONALE_APCA_NIV6 == "Exploitation_non_affectée_niv6"
+#     & ((VITICOVQ_403) / (VITICOQ_408)) < 0.6 
+#     ~ "II.2.D.c.ii", 
+#     
+#     TRUE    ~ (TYPO_NATIONALE_APCA_NIV6)))
+
+####II.2.D.c.i.Production de vin en vrac à destination négoce
+
+# DONNEES_BASE <- DONNEES_BASE %>%
+#   mutate(TYPO_NATIONALE_APCA_NIV6 = case_when(
+#     TYPO_NATIONALE_APCA_NIV1 == "Sous base niveaux II III IV" 
+#     & TYPO_NATIONALE_APCA_NIV2 == "II"
+#     & TYPO_NATIONALE_APCA_NIV3 == "II.2" 
+#     & TYPO_NATIONALE_APCA_NIV4 == "II.2.D"
+#     & TYPO_NATIONALE_APCA_NIV5 == "II.2.D.c" 
+#     & TYPO_NATIONALE_APCA_NIV6 == "Exploitation_non_affectée_niv6"
+#     & ((VITICOQ_403) / (CVI_301 + CVI_302 + CVI_303)) >= 0.6 
+#     ~ "II.2.D.c.i",
+#     
+#     TRUE    ~ (TYPO_NATIONALE_APCA_NIV6)))
+
+####II.2.D.c.ii.Production de vin vente en cave
+
+# DONNEES_BASE <- DONNEES_BASE %>%
+#   mutate(TYPO_NATIONALE_APCA_NIV6 = case_when(
+#     TYPO_NATIONALE_APCA_NIV1 == "Sous base niveaux II III IV" 
+#     & TYPO_NATIONALE_APCA_NIV2 == "II"
+#     & TYPO_NATIONALE_APCA_NIV3 == "II.2" 
+#     & TYPO_NATIONALE_APCA_NIV4 == "II.2.D"
+#     & TYPO_NATIONALE_APCA_NIV5 == "II.2.D.c" 
+#     & TYPO_NATIONALE_APCA_NIV6 == "Exploitation_non_affectée_niv6"
+#     & ((VITICOQ_403) / (CVI_301 + CVI_302 + CVI_303)) < 0.3
+#     ~ "II.2.D.c.ii",
+#     
+#     TRUE   ~ (TYPO_NATIONALE_APCA_NIV6)))
+
+####II.2.D.c.iii Production de vin vente mixte
+
+# DONNEES_BASE <- DONNEES_BASE %>%
+#   mutate(TYPO_NATIONALE_APCA_NIV6 = case_when(
+#     TYPO_NATIONALE_APCA_NIV1 == "Sous base niveaux II III IV" 
+#     & TYPO_NATIONALE_APCA_NIV2 == "II"
+#     & TYPO_NATIONALE_APCA_NIV3 == "II.2" 
+#     & TYPO_NATIONALE_APCA_NIV4 == "II.2.D"
+#     & TYPO_NATIONALE_APCA_NIV5 == "II.2.D.c" 
+#     & TYPO_NATIONALE_APCA_NIV6 == "Exploitation_non_affectée_niv6"
+#     & ((VITICOQ_403) / (CVI_301 + CVI_302 + CVI_303)) >= 0.3
+#     & ((VITICOQ_403) / (CVI_301 + CVI_302 + CVI_303)) < 0.6 
+#     ~ "II.2.D.c.iii",
+#     
+#     TRUE   ~ (TYPO_NATIONALE_APCA_NIV6)))
+
+####II.2.D.c.ii.cc1.Circuits courts
+
+# DONNEES_BASE <- DONNEES_BASE %>%
+#   mutate(TYPO_NATIONALE_APCA_NIV7 = case_when(
+#     TYPO_NATIONALE_APCA_NIV1 == "Sous base niveaux II III IV" 
+#     & TYPO_NATIONALE_APCA_NIV2 == "II"
+#     & TYPO_NATIONALE_APCA_NIV3 == "II.2" 
+#     & TYPO_NATIONALE_APCA_NIV4 == "II.2.D"
+#     & TYPO_NATIONALE_APCA_NIV5 == "II.2.D.c" 
+#     & TYPO_NATIONALE_APCA_NIV6 == "II.2.D.c.ii"
+#     & TYPO_NATIONALE_APCA_NIV7 == "Exploitation_non_affectée_niv7" 
+#     & (((VITICOQ_401 + VITICOQ_405 + VITICOQ_406) / 
+#           (VITICOQ_408) >= 0.5))
+#     ~ "II.2.D.c.ii.cc1",
+#     
+#     TRUE  ~ (TYPO_NATIONALE_APCA_NIV7)))
+
+####II.2.D.c.ii.cc2.Circuits longs
+
+# DONNEES_BASE <- DONNEES_BASE %>%
+#   mutate(TYPO_NATIONALE_APCA_NIV7 = case_when(
+#     TYPO_NATIONALE_APCA_NIV1 == "Sous base niveaux II III IV" 
+#     & TYPO_NATIONALE_APCA_NIV2 == "II"
+#     & TYPO_NATIONALE_APCA_NIV3 == "II.2" 
+#     & TYPO_NATIONALE_APCA_NIV4 == "II.2.D"
+#     & TYPO_NATIONALE_APCA_NIV5 == "II.2.D.c" 
+#     & TYPO_NATIONALE_APCA_NIV6 == "II.2.D.c.ii"
+#     & TYPO_NATIONALE_APCA_NIV7 == "Exploitation_non_affectée_niv7"
+#     & ((VITICOQ_401 + VITICOQ_405 + VITICOQ_406) / 
+#          (VITICOQ_408) < 0.5)
+#     ~ "II.2.D.c.ii.cc2",
+#     
+#     TRUE    ~  TYPO_NATIONALE_APCA_NIV7))
+
+####II.2.D.d.Production Mixte (raisins, moéts, vin)
+
+DONNEES_BASE <- DONNEES_BASE %>%
+  mutate(TYPO_NATIONALE_APCA_NIV5 = case_when(
+    TYPO_NATIONALE_APCA_NIV1 == "Sous base niveaux II III IV" 
+    & TYPO_NATIONALE_APCA_NIV2 == "II"
+    & TYPO_NATIONALE_APCA_NIV3 == "II.2" 
+    & TYPO_NATIONALE_APCA_NIV4 == "II.2.D" 
+    & TYPO_NATIONALE_APCA_NIV5 == "Exploitation_non_affectée_niv5"
+    
+    & ((CVI_302) / (CVI_301 + CVI_302 + CVI_303)) < 0.8
+    & ((CVI_303) /(CVI_301 + CVI_302 + CVI_303)) < 0.6
+    & ((CVI_301) /(CVI_301 + CVI_302 + CVI_303)) < 0.6
+    ~ "II.2.D.d",
+    
+    TRUE    ~ (TYPO_NATIONALE_APCA_NIV5)))
+
+####II.2.D.d.Autres exploitations viticoles
+
+
+DONNEES_BASE <- DONNEES_BASE %>%
+  mutate(TYPO_NATIONALE_APCA_NIV5 = ifelse(
+    TYPO_NATIONALE_APCA_NIV1 == "Sous base niveaux II III IV" 
+    & TYPO_NATIONALE_APCA_NIV2 == "II"
+    & TYPO_NATIONALE_APCA_NIV3 == "II.2" 
+    & TYPO_NATIONALE_APCA_NIV4 == "II.2.D" 
+    & TYPO_NATIONALE_APCA_NIV5 == "Exploitation_non_affectée_niv5",
+    "II.2.D.e",
+    TYPO_NATIONALE_APCA_NIV5))
+
+####II.2.E.Exploitations autres que spécialisés GC 
+#- combinaisons de productions mixtes
+
+DONNEES_BASE<-DONNEES_BASE %<>%  
+  mutate(TYPO_NATIONALE_APCA_NIV4=ifelse(( TYPO_NATIONALE_APCA_NIV3=="II.2" 
+                                           & TYPO_NATIONALE_APCA_NIV4=="Exploitation_non_affectée_niv4" 
+                                           & ( (pb28+  pb30)< 0.66*PBSTOT_COEF17 
+                                               &  (pb46+  pb47+  pb48+  pb49+  pb50+  pb55 ) < 0.66* PBSTOT_COEF17 
+                                               &  (pb31+  pb32+  pb57) < 0.66* PBSTOT_COEF17 
+                                               &  (pb53a+  pb53b+  pb54) < 0.66* PBSTOT_COEF17 )),
+                                         "II.2.E",
+                                         TYPO_NATIONALE_APCA_NIV4))
+
+
+####II.3 Exploitations avec champignons ####
+
+DONNEES_BASE<-DONNEES_BASE %>%   
+  mutate (TYPO_NATIONALE_APCA_NIV3= ifelse( TYPO_NATIONALE_APCA_NIV2=="II" 
+                                            & TYPO_NATIONALE_APCA_NIV3=="Exploitation_non_affectée_niv3" 
+                                            & pb60 > 0,
+                                            "II.3",
+                                            TYPO_NATIONALE_APCA_NIV3))
+
+###### Sous base III IV #####
+
+
+DONNEES_BASE<-DONNEES_BASE %<>%   
+  mutate (TYPO_NATIONALE_APCA_NIV1_AN= ifelse( TYPO_NATIONALE_APCA_NIV1=="Sous base niveaux II III IV"  
+                                               & ((BOV1>= 5 
+                                                   | BOV2 >= 10 
+                                                   |  (BOV4+ BOV5+ BOV6+ BOV7+ BOV8+ BOV9+ BOV10
+                                                       + BOV11+ BOV12+ BOV13+ BOV14 + BOV15) >=10 
+                                                   | ELEVQ_401>= 50  
+                                                   | ELEVQ_402 >= 25 
+                                                   | ELEVQ_501 >= 10  
+                                                   |  (ELEVQ_514+ ELEVQ_509) >= 50 
+                                                   |  (ELEVQ_701+ ELEVQ_703) >= 200
+                                                   |  (ELEVQ_702+ ELEVQ_711) >= 200
+                                                   |  (ELEVQ_704+ ELEVQ_705+ ELEVQ_707+ ELEVQ_709) >= 200
+                                                   |  (ELEVQ_706+ ELEVQ_708) >= 100
+                                                   | ELEVQ_710 >= 30
+                                                   | ELEVQ_712 >= 500
+                                                   | ELEVQ_713 >= 200
+                                                   | ELEVQ_721 >= 150 
+                                                   | ELEVQ_720 >= 500 
+                                                   | ELEVQ_601 >= 50 
+                                                   | ELEVQ_602 >= 200 
+                                                   | TOTAL_VOLAILLES >= 500
+                                                   | GAVAGEVOL == "1" 
+                                                   | ((DIVACTEXP_201 == "1" & ELEVQ_301>=10)
+                                                      |(DIVACTEXP_201 == "" & ELEVQ_301 >=  50)
+                                                      |(DIVACTEXP_201 == "0" & ELEVQ_301 >=  50)))),
+                                               "Sous base III IV",
+                                               TYPO_NATIONALE_APCA_NIV1_AN))
+
+
+
+
+
+#### III.Exploitation avec élevage ruminant #####
+
+DONNEES_BASE<-DONNEES_BASE %<>%   
+  mutate( TYPO_NATIONALE_APCA_NIV2=ifelse(TYPO_NATIONALE_APCA_NIV1_AN=="Sous base III IV" 
+                                          & TYPO_NATIONALE_APCA_NIV2=="Exploitation_non_affectée_niv2" 
+                                          & (BOV1>= 5 
+                                             | BOV2 >= 10 
+                                             |  (BOV4+ BOV5+ BOV6+ BOV7+ BOV8+ BOV9
+                                                 + BOV10+ BOV11+ BOV12+ BOV13+ BOV14 + BOV15)>=10
+                                             | (ELEVQ_301 >= 10 & DIVACTEXP_201 == "1") 
+                                             | (ELEVQ_301 >= 50 & DIVACTEXP_201 == "0") 
+                                             | (ELEVQ_301 >= 50 & DIVACTEXP_201 == "")
+                                             | ELEVQ_401>= 50  
+                                             | ELEVQ_402 >= 25),
+                                          "III",
+                                          TYPO_NATIONALE_APCA_NIV2))
+
+####III.1.Exploitations avec élevage herbivore spécialisé viande####
+
+DONNEES_BASE<-DONNEES_BASE %<>%   
+  mutate(TYPO_NATIONALE_APCA_NIV3=ifelse(TYPO_NATIONALE_APCA_NIV2=="III" 
+                                         & TYPO_NATIONALE_APCA_NIV3=="Exploitation_non_affectée_niv3" 
+                                         & (BOV1<5 
+                                            & ((ELEVQ_301 < 10 & DIVACTEXP_201 == "1") 
+                                               | (ELEVQ_301 < 50 & DIVACTEXP_201 =="0") 
+                                               | (ELEVQ_301 < 50 & DIVACTEXP_201 == ""))
+                                            & ELEVQ_402 < 25),
+                                         "III.1",
+                                         TYPO_NATIONALE_APCA_NIV3))
+
+####III.1.A.Exploitation viande polyculteurs éleveurs
+
+DONNEES_BASE<-DONNEES_BASE %<>%   
+  mutate(TYPO_NATIONALE_APCA_NIV4=ifelse( TYPO_NATIONALE_APCA_NIV3=="III.1"
+                                          & TYPO_NATIONALE_APCA_NIV4=="Exploitation_non_affectée_niv4" 
+                                          & ((CULTSUR_1200!=0 &  CULTSUR_0400<= 0.66*CULTSUR_1200 )
+                                             | (CULTSUR_GC >= 4000)
+                                             | (CULTSUR_LPC >= 150) 
+                                             | (CULTSUR_0801 >= 150) 
+                                             |  (CULTSUR_0901+ CULTSUR_0916+ CULTSUR_0908+ CULTSUR_0924
+                                                 + CULTSUR_0930+ CULTSUR_0806) >= 100
+                                             |  (CULTSUR_0901+ CULTSUR_0916+ CULTSUR_0908+ CULTSUR_0924
+                                                 + CULTSUR_0930+ CULTSUR_0806+ CULTSUR_0801) >= 150
+                                             | (CULTSUR_0913 >= 50) 
+                                             |   (CULTSUR_0958+ CULTSUR_0701+ CULTSUR_0704+ CULTSUR_0705
+                                                  + CULTSUR_0807+ CULTSUR_0808) > 0  
+                                             | (DEVSUR_compteur > 5) 
+                                             |  (CULTSUR_0506+ CULTSUR_0507) > 0
+                                             | (CULTSUR_0302 > 0) 
+                                             | (CULTSUR_0303 > 0)
+                                             | (DEVSUR_01 > 0) 
+                                             | (CULTSUR_0304 > 0)),
+                                          "III.1.A",
+                                          TYPO_NATIONALE_APCA_NIV4))
+
+
+#### III.1.A.a Exploitations polyculture + élevage ruminant viande et granivores */
+
+DONNEES_BASE<-DONNEES_BASE %<>%    
+  mutate(TYPO_NATIONALE_APCA_NIV5=ifelse ((TYPO_NATIONALE_APCA_NIV4=="III.1.A" 
+                                           & TYPO_NATIONALE_APCA_NIV5=="Exploitation_non_affectée_niv5"
+                                           & pbsGRANIV >= 25000),
+                                          "III.1.A.a",
+                                          TYPO_NATIONALE_APCA_NIV5))
+
+
+
+####III.1.A.b Exploitations polyculture + élevage ruminant viande 
+
+DONNEES_BASE<-DONNEES_BASE %<>%    
+  mutate(TYPO_NATIONALE_APCA_NIV5=ifelse ((TYPO_NATIONALE_APCA_NIV4=="III.1.A" 
+                                           & TYPO_NATIONALE_APCA_NIV5=="Exploitation_non_affectée_niv5"
+                                           & pbsGRANIV < 25000),
+                                          "III.1.A.b",
+                                          TYPO_NATIONALE_APCA_NIV5))
+
+#### III.1.B. Exploitations spécialisées viande  ####
+DONNEES_BASE<-DONNEES_BASE %<>% 
+  mutate(TYPO_NATIONALE_APCA_NIV4=ifelse(TYPO_NATIONALE_APCA_NIV3=="III.1" 
+                                         & TYPO_NATIONALE_APCA_NIV4=="Exploitation_non_affectée_niv4" 
+                                         & (CULTSUR_GC < 4000  
+                                            & (( CULTSUR_0400> 0.66*CULTSUR_1200 )| CULTSUR_1200 == 0)
+                                            & (CULTSUR_0801 < 150) 
+                                            &  (CULTSUR_0901+ CULTSUR_0916+ CULTSUR_0908+ CULTSUR_0924
+                                                + CULTSUR_0930+ CULTSUR_0806) < 100
+                                            &  (CULTSUR_0901+ CULTSUR_0916+ CULTSUR_0908+ CULTSUR_0924
+                                                + CULTSUR_0930+ CULTSUR_0806+ CULTSUR_0801) < 150
+                                            & (CULTSUR_0913 < 50) 
+                                            &  (CULTSUR_0958+ CULTSUR_0701+ CULTSUR_0704+ CULTSUR_0705+ CULTSUR_0807+ CULTSUR_0808) == 0 
+                                            & (DEVSUR_compteur <= 5) 
+                                            &  (CULTSUR_0506+ CULTSUR_0507) == 0
+                                            & (CULTSUR_0302 == 0) 
+                                            & (CULTSUR_0303 == 0) 
+                                            & (DEVSUR_01 == 0)
+                                            & (CULTSUR_0304 == 0) 
+                                            & (CULTSUR_LPC < 150)),
+                                         "III.1.B",
+                                         TYPO_NATIONALE_APCA_NIV4))
+
+
+
+####III.1.B.aExploitations spécialisées élevage ruminants
+
+DONNEES_BASE<-DONNEES_BASE %<>% 
+  mutate(TYPO_NATIONALE_APCA_NIV5=ifelse((TYPO_NATIONALE_APCA_NIV1_AN=="Sous base III IV" 
+                                          &TYPO_NATIONALE_APCA_NIV4=="III.1.B" 
+                                          & TYPO_NATIONALE_APCA_NIV5=="Exploitation_non_affectée_niv5" 
+                                          & (pbsGRANIV < 25000)),
+                                         "III.1.B.a",
+                                         TYPO_NATIONALE_APCA_NIV5))
+
+####III.1.B.a.i Exploitations spécialisées bovins viande
+
+DONNEES_BASE <- DONNEES_BASE %>%
+  mutate(TYPO_NATIONALE_APCA_NIV6 = case_when(
+    TYPO_NATIONALE_APCA_NIV1_AN == "Sous base III IV"
+    & TYPO_NATIONALE_APCA_NIV2 == "III"
+    & TYPO_NATIONALE_APCA_NIV3 == "III.1"
+    & TYPO_NATIONALE_APCA_NIV4 == "III.1.B"
+    & TYPO_NATIONALE_APCA_NIV5 == "III.1.B.a"
+    & TYPO_NATIONALE_APCA_NIV6 == "Exploitation_non_affectée_niv6"
+    & ((UGBAG_BOV -BOV1) >  0.85 * (UGBAG_OVI - 0.15 *ELEVQ_402 +
+                                      UGBAG_BOV -BOV1))
+    ~ "III.1.B.a.i",
+    
+    TRUE   ~ (TYPO_NATIONALE_APCA_NIV6)))
+
+####III.1.B.a.i.e1 Exploitations spé BV - Engraisseurs
+
+DONNEES_BASE <- DONNEES_BASE %>%
+  mutate(TYPO_NATIONALE_APCA_NIV7 = case_when(
+    TYPO_NATIONALE_APCA_NIV1_AN == "Sous base III IV"
+    & TYPO_NATIONALE_APCA_NIV2 == "III"
+    & TYPO_NATIONALE_APCA_NIV3 == "III.1"
+    & TYPO_NATIONALE_APCA_NIV4 == "III.1.B"
+    & TYPO_NATIONALE_APCA_NIV5 == "III.1.B.a"
+    & TYPO_NATIONALE_APCA_NIV6 == "III.1.B.a.i"
+    & TYPO_NATIONALE_APCA_NIV7 == "Exploitation_non_affectée_niv7"
+    & (BOV2 == 0 | (UGBAG_BOV >= 8*BOV1 & UGBAG_BOV >= 8*BOV2))
+    ~ "III.1.B.a.i.e1",
+    
+    TRUE    ~ (TYPO_NATIONALE_APCA_NIV7)))
+
+####III.1.B.a.i.ind Exploitations spé BV - type indéterminé
+
+DONNEES_BASE <- DONNEES_BASE %>%
+  mutate(TYPO_NATIONALE_APCA_NIV7 = case_when(
+    TYPO_NATIONALE_APCA_NIV1_AN == "Sous base III IV"
+    & TYPO_NATIONALE_APCA_NIV2 == "III"
+    & TYPO_NATIONALE_APCA_NIV3 == "III.1"
+    & TYPO_NATIONALE_APCA_NIV4 == "III.1.B"
+    & TYPO_NATIONALE_APCA_NIV5 == "III.1.B.a"
+    & TYPO_NATIONALE_APCA_NIV6 == "III.1.B.a.i"
+    & TYPO_NATIONALE_APCA_NIV7=="Exploitation_non_affectée_niv7"
+    & (NBBOV_NAIS < 0.5*(BOV1 + BOV2))
+    ~ "III.1.B.a.i.ind",
+    
+    TRUE   ~ (TYPO_NATIONALE_APCA_NIV7)))
+
+####III.1.B.a.i.e2 Exploitations spé BV - Producteurs de veaux
+
+DONNEES_BASE <- DONNEES_BASE %>%
+  mutate(TYPO_NATIONALE_APCA_NIV7 = case_when(
+    TYPO_NATIONALE_APCA_NIV1_AN == "Sous base III IV"
+    & TYPO_NATIONALE_APCA_NIV2 == "III"
+    & TYPO_NATIONALE_APCA_NIV3 == "III.1"
+    & TYPO_NATIONALE_APCA_NIV4 == "III.1.B"
+    & TYPO_NATIONALE_APCA_NIV5 == "III.1.B.a"
+    & TYPO_NATIONALE_APCA_NIV6 == "III.1.B.a.i"
+    & TYPO_NATIONALE_APCA_NIV7 == "Exploitation_non_affectée_niv7"
+    & (Sorties_VB >= 0.2 *BOV2 & Sorties_VB < 1.3 *BOV2)
+    ~ "III.1.B.a.i.e2",
+    
+    TRUE    ~ (TYPO_NATIONALE_APCA_NIV7)))
+
+####III.1.B.a.i.e2.v1 Veaux sous la mére
+
+# DONNEES_BASE <- DONNEES_BASE %>%
+#   mutate(TYPO_NATIONALE_APCA_NIV8 = case_when(
+#     TYPO_NATIONALE_APCA_NIV1_AN == "Sous base III IV" 
+#     & TYPO_NATIONALE_APCA_NIV2 == "III"
+#     & TYPO_NATIONALE_APCA_NIV3 == "III.1" 
+#     & TYPO_NATIONALE_APCA_NIV4 == "III.1.B" 
+#     & TYPO_NATIONALE_APCA_NIV5 == "III.1.B.a" 
+#     & TYPO_NATIONALE_APCA_NIV6 == "III.1.B.a.i"
+#     & TYPO_NATIONALE_APCA_NIV7 == "III.1.B.a.i.e2" 
+#     & TYPO_NATIONALE_APCA_NIV8 == "Exploitation_non_affectée_niv8"
+#     & (Sorties_VB1 >= Sorties_VB2)
+#     ~ "III.1.B.a.i.e2.v1", 
+#     
+#     TRUE   ~ (TYPO_NATIONALE_APCA_NIV8)))
+
+####III.1.B.a.i.e2.v2 Veaux lourds
+
+# DONNEES_BASE <- DONNEES_BASE %>%
+#   mutate(TYPO_NATIONALE_APCA_NIV8 = case_when(
+#     TYPO_NATIONALE_APCA_NIV1_AN == "Sous base III IV" 
+#     & TYPO_NATIONALE_APCA_NIV2 == "III"
+#     & TYPO_NATIONALE_APCA_NIV3 == "III.1" 
+#     & TYPO_NATIONALE_APCA_NIV4 == "III.1.B"
+#     & TYPO_NATIONALE_APCA_NIV5 == "III.1.B.a" 
+#     & TYPO_NATIONALE_APCA_NIV6 == "III.1.B.a.i"
+#     & TYPO_NATIONALE_APCA_NIV7 == "III.1.B.a.i.e2" 
+#     & TYPO_NATIONALE_APCA_NIV8 == "Exploitation_non_affectée_niv8"
+#     & (Sorties_VB1 < Sorties_VB2)
+#     ~ "III.1.B.a.i.e2.v2",
+#     
+#     TRUE    ~ (TYPO_NATIONALE_APCA_NIV8)))
+
+####III.1.B.a.i.e3 Exploitations spé BV - Naisseurs-Eng
+
+DONNEES_BASE <- DONNEES_BASE %>%
+  mutate(TYPO_NATIONALE_APCA_NIV7 = case_when(
+    TYPO_NATIONALE_APCA_NIV1_AN == "Sous base III IV"
+    & TYPO_NATIONALE_APCA_NIV2 == "III"
+    & TYPO_NATIONALE_APCA_NIV3 == "III.1"
+    & TYPO_NATIONALE_APCA_NIV4 == "III.1.B"
+    & TYPO_NATIONALE_APCA_NIV5 == "III.1.B.a"
+    & TYPO_NATIONALE_APCA_NIV6 == "III.1.B.a.i"
+    & TYPO_NATIONALE_APCA_NIV7 == "Exploitation_non_affectée_niv7"
+    & (Sorties_MB >= 0.2 *BOV2)
+    ~ "III.1.B.a.i.e3",
+    
+    TRUE    ~ (TYPO_NATIONALE_APCA_NIV7)))
+
+####III.1.B.a.i.e3.v1 Naisseurs-Eng de JB (moins d1 an)
+
+# DONNEES_BASE <- DONNEES_BASE %>%
+#   mutate(TYPO_NATIONALE_APCA_NIV8 = case_when(
+#     TYPO_NATIONALE_APCA_NIV1_AN == "Sous base III IV" 
+#     & TYPO_NATIONALE_APCA_NIV2 == "III"
+#     & TYPO_NATIONALE_APCA_NIV3 == "III.1" 
+#     & TYPO_NATIONALE_APCA_NIV4 == "III.1.B"
+#     & TYPO_NATIONALE_APCA_NIV5 == "III.1.B.a" 
+#     & TYPO_NATIONALE_APCA_NIV6 == "III.1.B.a.i"
+#     & TYPO_NATIONALE_APCA_NIV7 == "III.1.B.a.i.e3" 
+#     & TYPO_NATIONALE_APCA_NIV8 == "Exploitation_non_affectée_niv8"
+#     & (Sorties_JB1 >= Sorties_JBC & Sorties_JB1 >= Sorties_MBB)
+#     ~ "III.1.B.a.i.e3.v1",
+#     
+#     TRUE     ~ (TYPO_NATIONALE_APCA_NIV8 )))
+
+####III.1.B.a.i.e3.v2 Naisseurs-Eng de JB classiques
+
+# DONNEES_BASE <- DONNEES_BASE %>%
+#   mutate(TYPO_NATIONALE_APCA_NIV8 = case_when(
+#     TYPO_NATIONALE_APCA_NIV1_AN == "Sous base III IV" 
+#     & TYPO_NATIONALE_APCA_NIV2 == "III"
+#     & TYPO_NATIONALE_APCA_NIV3 == "III.1" 
+#     & TYPO_NATIONALE_APCA_NIV4 == "III.1.B"
+#     & TYPO_NATIONALE_APCA_NIV5 == "III.1.B.a" 
+#     & TYPO_NATIONALE_APCA_NIV6 == "III.1.B.a.i"
+#     & TYPO_NATIONALE_APCA_NIV7 == "III.1.B.a.i.e3" 
+#     & TYPO_NATIONALE_APCA_NIV8 == "Exploitation_non_affectée_niv8"
+#     & (Sorties_JBC >= Sorties_MBB & Sorties_JBC > Sorties_JB1)
+#     ~ "III.1.B.a.i.e3.v2",
+#     
+#     TRUE    ~ (TYPO_NATIONALE_APCA_NIV8)))
+
+####III.1.B.a.i.e3.v3 Naisseurs-Engriassement des boeurfs  de Boeufs
+
+# DONNEES_BASE <- DONNEES_BASE %>%
+#   mutate(TYPO_NATIONALE_APCA_NIV8 = case_when(
+#     TYPO_NATIONALE_APCA_NIV1_AN == "Sous base III IV" 
+#     & TYPO_NATIONALE_APCA_NIV2 == "III"
+#     & TYPO_NATIONALE_APCA_NIV3 == "III.1" 
+#     & TYPO_NATIONALE_APCA_NIV4 == "III.1.B"
+#     & TYPO_NATIONALE_APCA_NIV5 == "III.1.B.a" 
+#     & TYPO_NATIONALE_APCA_NIV6 == "III.1.B.a.i"
+#     & TYPO_NATIONALE_APCA_NIV7 == "III.1.B.a.i.e3" 
+#     & TYPO_NATIONALE_APCA_NIV8 == "Exploitation_non_affectée_niv8"
+#     & (Sorties_JBC < Sorties_MBB & Sorties_JB1 < Sorties_MBB)
+#     ~ "III.1.B.a.i.e3.v3",
+#     
+#     TRUE   ~ (TYPO_NATIONALE_APCA_NIV8)))
+
+####III.1.B.a.i.e4 Exploitations spé BV - Naisseurs
+
+DONNEES_BASE <- DONNEES_BASE %>%
+  mutate(TYPO_NATIONALE_APCA_NIV7 = case_when(
+    TYPO_NATIONALE_APCA_NIV1_AN == "Sous base III IV"
+    & TYPO_NATIONALE_APCA_NIV2 == "III"
+    & TYPO_NATIONALE_APCA_NIV3 == "III.1"
+    & TYPO_NATIONALE_APCA_NIV4 == "III.1.B"
+    & TYPO_NATIONALE_APCA_NIV5 == "III.1.B.a"
+    & TYPO_NATIONALE_APCA_NIV6 == "III.1.B.a.i"
+    & TYPO_NATIONALE_APCA_NIV7 == "Exploitation_non_affectée_niv7"
+    & (Sorties_EM >= 0.2*BOV2)
+    ~ "III.1.B.a.i.e4",
+    
+    TRUE    ~ (TYPO_NATIONALE_APCA_NIV7)))
+
+####III.1.B.a.i.e4.v1 Naisseurs JB maigres
+
+# DONNEES_BASE <- DONNEES_BASE %>%
+#   mutate(TYPO_NATIONALE_APCA_NIV8 = case_when(
+#     TYPO_NATIONALE_APCA_NIV1_AN == "Sous base III IV" 
+#     & TYPO_NATIONALE_APCA_NIV2 == "III" 
+#     & TYPO_NATIONALE_APCA_NIV3 == "III.1" 
+#     & TYPO_NATIONALE_APCA_NIV4 == "III.1.B"
+#     & TYPO_NATIONALE_APCA_NIV5 == "III.1.B.a" 
+#     & TYPO_NATIONALE_APCA_NIV6 == "III.1.B.a.i"
+#     & TYPO_NATIONALE_APCA_NIV7 == "III.1.B.a.i.e4" 
+#     & TYPO_NATIONALE_APCA_NIV8 == "Exploitation_non_affectée_niv8"
+#     & (Sorties_JBM >= Sorties_EBR & Sorties_JBM >= Sorties_EB)
+#     ~ "III.1.B.a.i.e4.v1",
+#     
+#     TRUE    ~ (TYPO_NATIONALE_APCA_NIV8)))
+
+####III.1.B.a.i.e4.v2 Naisseurs Broutards repoussés
+
+# DONNEES_BASE <- DONNEES_BASE %>%
+#   mutate(TYPO_NATIONALE_APCA_NIV8 = case_when(
+#     TYPO_NATIONALE_APCA_NIV1_AN == "Sous base III IV" 
+#     & TYPO_NATIONALE_APCA_NIV2 == "III" 
+#     & TYPO_NATIONALE_APCA_NIV3 == "III.1" 
+#     & TYPO_NATIONALE_APCA_NIV4 == "III.1.B" 
+#     & TYPO_NATIONALE_APCA_NIV5 == "III.1.B.a" 
+#     & TYPO_NATIONALE_APCA_NIV6 == "III.1.B.a.i"
+#     & TYPO_NATIONALE_APCA_NIV7 == "III.1.B.a.i.e4" 
+#     & TYPO_NATIONALE_APCA_NIV8 == "Exploitation_non_affectée_niv8"
+#     & (Sorties_EBR >=Sorties_EB)
+#     ~ "III.1.B.a.i.e4.v2",
+#     
+#     TRUE    ~ (TYPO_NATIONALE_APCA_NIV8)))
+
+####III.1.B.a.i.e4.v3 Broutards
+
+# DONNEES_BASE <- DONNEES_BASE %>%
+#   mutate(TYPO_NATIONALE_APCA_NIV8 = case_when(
+#     TYPO_NATIONALE_APCA_NIV1_AN == "Sous base III IV" 
+#     & TYPO_NATIONALE_APCA_NIV2 == "III"
+#     & TYPO_NATIONALE_APCA_NIV3== "III.1" 
+#     & TYPO_NATIONALE_APCA_NIV4 == "III.1.B"
+#     & TYPO_NATIONALE_APCA_NIV5 == "III.1.B.a" 
+#     & TYPO_NATIONALE_APCA_NIV6 == "III.1.B.a.i"
+#     & TYPO_NATIONALE_APCA_NIV7 == "III.1.B.a.i.e4" 
+#     & TYPO_NATIONALE_APCA_NIV8 == "Exploitation_non_affectée_niv8"
+#     & (Sorties_EBR <Sorties_EB & Sorties_JBM < Sorties_EB)
+#     ~ "III.1.B.a.i.e4.v3",
+#     
+#     TRUE  ~ (TYPO_NATIONALE_APCA_NIV8)))
+
+####III.1.B.a.ii Exploitations spécialisées ovins viande
+
+DONNEES_BASE <- DONNEES_BASE %>%
+  mutate(TYPO_NATIONALE_APCA_NIV6 = case_when(
+    TYPO_NATIONALE_APCA_NIV1_AN == "Sous base III IV"
+    & TYPO_NATIONALE_APCA_NIV2 == "III"
+    & TYPO_NATIONALE_APCA_NIV3 == "III.1"
+    & TYPO_NATIONALE_APCA_NIV4 == "III.1.B"
+    & TYPO_NATIONALE_APCA_NIV5 == "III.1.B.a"
+    & TYPO_NATIONALE_APCA_NIV6 == "Exploitation_non_affectée_niv6"
+    & ((UGBAG_OVI - 0.15 *ELEVQ_402 ) >
+         0.85 * (UGBAG_OVI - 0.15 * ELEVQ_402 + UGBAG_BOV - BOV1))
+    ~ "III.1.B.a.ii",
+    
+    TRUE    ~ (TYPO_NATIONALE_APCA_NIV6)))
+
+####III.1.B.a.ii.h4 ovins viande pastoraux
+
+# DONNEES_BASE <- DONNEES_BASE %>%
+#   mutate(TYPO_NATIONALE_APCA_NIV7 = case_when(
+#     TYPO_NATIONALE_APCA_NIV1_AN == "Sous base III IV" 
+#     & TYPO_NATIONALE_APCA_NIV2 == "III"
+#     & TYPO_NATIONALE_APCA_NIV3 == "III.1" 
+#     & TYPO_NATIONALE_APCA_NIV4 == "III.1.B"
+#     & TYPO_NATIONALE_APCA_NIV5 == "III.1.B.a" 
+#     & TYPO_NATIONALE_APCA_NIV6 == "III.1.B.a.ii"
+#     & TYPO_NATIONALE_APCA_NIV7 == "Exploitation_non_affectée_niv7" 
+#     & (UGBAG_OVI / (CULTSUR_0400 - CULTSUR_0408) < 1.4 
+#        & CULTSUR_0408 >= 1000)
+#     ~ "III.1.B.a.ii.h4",
+#     
+#     TRUE    ~ (TYPO_NATIONALE_APCA_NIV7)))
+
+####III.1.B.a.ii.h1 ovins viande herbagers
+
+# DONNEES_BASE <- DONNEES_BASE %>%
+#   mutate(TYPO_NATIONALE_APCA_NIV7 = case_when(
+#     TYPO_NATIONALE_APCA_NIV1_AN == "Sous base III IV" 
+#     & TYPO_NATIONALE_APCA_NIV2 == "III"
+#     & TYPO_NATIONALE_APCA_NIV3 == "III.1" 
+#     & TYPO_NATIONALE_APCA_NIV4 == "III.1.B" 
+#     & TYPO_NATIONALE_APCA_NIV5 == "III.1.B.a" 
+#     & TYPO_NATIONALE_APCA_NIV6 == "III.1.B.a.ii" 
+#     & TYPO_NATIONALE_APCA_NIV7 == "Exploitation_non_affectée_niv7" 
+#     & (UGBAG_OVI / (CULTSUR_0400 - CULTSUR_0408) < 1.4)
+#     ~  "III.1.B.a.ii.h1",
+#     
+#     TRUE     ~ (TYPO_NATIONALE_APCA_NIV7)))
+
+####III.1.B.a.ii.h1.e1 ovins viande herbagers extensif
+
+# DONNEES_BASE <- DONNEES_BASE %>%
+#   mutate(TYPO_NATIONALE_APCA_NIV8 = case_when(
+#     TYPO_NATIONALE_APCA_NIV1_AN == "Sous base III IV" 
+#     & TYPO_NATIONALE_APCA_NIV2 == "III"
+#     & TYPO_NATIONALE_APCA_NIV3 == "III.1" 
+#     & TYPO_NATIONALE_APCA_NIV4 == "III.1.B"
+#     & TYPO_NATIONALE_APCA_NIV5 == "III.1.B.a" 
+#     & TYPO_NATIONALE_APCA_NIV6 == "III.1.B.a.ii"
+#     & TYPO_NATIONALE_APCA_NIV7 == "III.1.B.a.ii.h1" 
+#     & TYPO_NATIONALE_APCA_NIV8 == "Exploitation_non_affectée_niv8"
+#     & (UGBAG_OVI / CULTSUR_0400) < 0.8
+#     ~ "III.1.B.a.ii.h1.e1",
+#     
+#     TRUE   ~ (TYPO_NATIONALE_APCA_NIV8)))
+
+####III.1.B.a.ii.h1.e2 ovins viande herbagers intensif
+
+# DONNEES_BASE <- DONNEES_BASE %>%
+#   mutate(TYPO_NATIONALE_APCA_NIV8 = case_when(
+#     TYPO_NATIONALE_APCA_NIV1_AN == "Sous base III IV" 
+#     & TYPO_NATIONALE_APCA_NIV2 == "III"
+#     & TYPO_NATIONALE_APCA_NIV3 == "III.1" 
+#     & TYPO_NATIONALE_APCA_NIV4 == "III.1.B"
+#     & TYPO_NATIONALE_APCA_NIV5 == "III.1.B.a" 
+#     & TYPO_NATIONALE_APCA_NIV6 == "III.1.B.a.ii"
+#     & TYPO_NATIONALE_APCA_NIV7 == "III.1.B.a.ii.h1" 
+#     & TYPO_NATIONALE_APCA_NIV8 == "Exploitation_non_affectée_niv8"
+#     & (UGBAG_OVI / CULTSUR_0400) >= 0.8
+#     ~  "III.1.B.a.ii.h1.e2",
+#     
+#     TRUE    ~ (TYPO_NATIONALE_APCA_NIV8)))
+
+####III.1.B.a.ii.h2 ovins viande fourrager
+
+# DONNEES_BASE <- DONNEES_BASE %>%
+#   mutate(TYPO_NATIONALE_APCA_NIV7 = case_when(
+#     TYPO_NATIONALE_APCA_NIV1_AN == "Sous base III IV" 
+#     & TYPO_NATIONALE_APCA_NIV2 == "III"
+#     & TYPO_NATIONALE_APCA_NIV3 == "III.1" 
+#     & TYPO_NATIONALE_APCA_NIV4 == "III.1.B"
+#     & TYPO_NATIONALE_APCA_NIV5 == "III.1.B.a" 
+#     & TYPO_NATIONALE_APCA_NIV6 == "III.1.B.a.ii"
+#     & TYPO_NATIONALE_APCA_NIV7 == "Exploitation_non_affectée_niv7"
+#     & (UGBAG_OVI / CULTSUR_0400 - CULTSUR_0408) >= 1.4 
+#     & CULTSUR_0408 < 1000 
+#     & (PATCOL== "0" | PATCOL== " ") 
+#     & (UGBAG_OVI / (CULTSUR_0400 - CULTSUR_0408)) < 5
+#     ~ "III.1.B.a.ii.h2",
+#     
+#     TRUE   ~ (TYPO_NATIONALE_APCA_NIV7)))
+
+####III.1.B.a.ii.h3 Ovins bergerie intégrale
+
+# DONNEES_BASE <- DONNEES_BASE %>%
+#   mutate(TYPO_NATIONALE_APCA_NIV7 = case_when(
+#     TYPO_NATIONALE_APCA_NIV1_AN == "Sous base III IV" 
+#     & TYPO_NATIONALE_APCA_NIV2 == "III"
+#     & TYPO_NATIONALE_APCA_NIV3 == "III.1" 
+#     & TYPO_NATIONALE_APCA_NIV4 == "III.1.B"
+#     & TYPO_NATIONALE_APCA_NIV5 == "III.1.B.a" 
+#     & TYPO_NATIONALE_APCA_NIV6 == "III.1.B.a.ii"
+#     & TYPO_NATIONALE_APCA_NIV7 == "Exploitation_non_affectée_niv7" 
+#     & (UGBAG_OVI / (CULTSUR_0400 - CULTSUR_0408)) >= 1.4 
+#     & CULTSUR_0408 < 1000 
+#     & (PATCOL == "0" |PATCOL == " ")
+#     & (UGBAG_OVI / (CULTSUR_0400 - CULTSUR_0408)) >= 5
+#     ~ "III.1.B.a.ii.h3",
+#     
+#     TRUE    ~ (TYPO_NATIONALE_APCA_NIV7)))
+
+####III.1.B.a.iii Exploitations spécialisées viande (troupeaux mixtes)
+
+DONNEES_BASE <- DONNEES_BASE %>%
+  mutate(TYPO_NATIONALE_APCA_NIV6 = case_when(
+    TYPO_NATIONALE_APCA_NIV1_AN == "Sous base III IV"
+    & TYPO_NATIONALE_APCA_NIV2 == "III"
+    & TYPO_NATIONALE_APCA_NIV3 == "III.1"
+    & TYPO_NATIONALE_APCA_NIV4 == "III.1.B"
+    & TYPO_NATIONALE_APCA_NIV5 == "III.1.B.a"
+    & TYPO_NATIONALE_APCA_NIV6 == "Exploitation_non_affectée_niv6"
+    & ((UGBAG_OVI - 0.15 *ELEVQ_402 ) <=  0.85 * (UGBAG_OVI - 0.15 *
+                                                    ELEVQ_402 +
+                                                    UGBAG_BOV - BOV1))
+    & ((UGBAG_BOV -BOV1) <=  0.85 * (UGBAG_OVI - 0.15 *ELEVQ_402 +
+                                       UGBAG_BOV -BOV1))
+    ~ "III.1.B.a.iii",
+    
+    TRUE    ~ (TYPO_NATIONALE_APCA_NIV6)))
+
+####III.1.B.bExploitations ruminants viande et granivores
+
+DONNEES_BASE<-DONNEES_BASE %<>% 
+  mutate(TYPO_NATIONALE_APCA_NIV5=ifelse(TYPO_NATIONALE_APCA_NIV1_AN=="Sous base III IV"
+                                         &TYPO_NATIONALE_APCA_NIV4=="III.1.B" 
+                                         & TYPO_NATIONALE_APCA_NIV5=="Exploitation_non_affectée_niv5" 
+                                         & (pbsGRANIV >= 25000),
+                                         "III.1.B.b",
+                                         TYPO_NATIONALE_APCA_NIV5))
+
+####III.1.B.b.i Exploitations ruminants viande et porc
+# 
+DONNEES_BASE <- DONNEES_BASE %>%
+  mutate(TYPO_NATIONALE_APCA_NIV6 = case_when(
+    TYPO_NATIONALE_APCA_NIV1_AN == "Sous base III IV"
+    & TYPO_NATIONALE_APCA_NIV2 == "III"
+    & TYPO_NATIONALE_APCA_NIV3 == "III.1"
+    & TYPO_NATIONALE_APCA_NIV4 == "III.1.B"
+    & TYPO_NATIONALE_APCA_NIV5 == "III.1.B.b"
+    & TYPO_NATIONALE_APCA_NIV6 == "Exploitation_non_affectée_niv6"
+    & (pbsPORC  / pbsGRANIV) >  0.66
+    ~ "III.1.B.b.i",
+    
+    TRUE    ~ (TYPO_NATIONALE_APCA_NIV6)))
+
+####III.1.B.b.ii  Exploitations ruminants viande et  volaille
+
+DONNEES_BASE <- DONNEES_BASE %>%
+  mutate(TYPO_NATIONALE_APCA_NIV6 = case_when(
+    TYPO_NATIONALE_APCA_NIV1_AN == "Sous base III IV"
+    & TYPO_NATIONALE_APCA_NIV2 == "III"
+    & TYPO_NATIONALE_APCA_NIV3 == "III.1"
+    & TYPO_NATIONALE_APCA_NIV4 == "III.1.B"
+    & TYPO_NATIONALE_APCA_NIV5 == "III.1.B.b"
+    & TYPO_NATIONALE_APCA_NIV6 == "Exploitation_non_affectée_niv6"
+    & (pbsVOL / (0.66 *pbsGRANIV) >  0.66)
+    ~ "III.1.B.b.ii",
+    
+    TRUE    ~ (TYPO_NATIONALE_APCA_NIV6)))
+
+####III.1.B.b.iii  Exploitations ruminants viande et  lapins
+
+DONNEES_BASE <- DONNEES_BASE %>%
+  mutate(TYPO_NATIONALE_APCA_NIV6 = case_when(
+    TYPO_NATIONALE_APCA_NIV1_AN == "Sous base III IV"
+    & TYPO_NATIONALE_APCA_NIV2 == "III"
+    & TYPO_NATIONALE_APCA_NIV3 == "III.1"
+    & TYPO_NATIONALE_APCA_NIV4 == "III.1.B"
+    & TYPO_NATIONALE_APCA_NIV5 == "III.1.B.b"
+    & TYPO_NATIONALE_APCA_NIV6 == "Exploitation_non_affectée_niv6"
+    & (pb80 / pbsGRANIV)  > 0.66
+    ~ "III.1.B.b.iii",
+    
+    TRUE    ~ (TYPO_NATIONALE_APCA_NIV6)))
+
+####III.1.B.b.iv  Exploitations polyéleveurs ruminants viande et  granivores
+
+DONNEES_BASE <- DONNEES_BASE %>%
+  mutate(TYPO_NATIONALE_APCA_NIV6 = case_when(
+    TYPO_NATIONALE_APCA_NIV1_AN == "Sous base III IV"
+    & TYPO_NATIONALE_APCA_NIV2 == "III"
+    & TYPO_NATIONALE_APCA_NIV3 == "III.1"
+    & TYPO_NATIONALE_APCA_NIV4 == "III.1.B"
+    & TYPO_NATIONALE_APCA_NIV5 == "III.1.B.b"
+    & TYPO_NATIONALE_APCA_NIV6 == "Exploitation_non_affectée_niv6"
+    & (pbsPORC  / pbsGRANIV)  <=  0.66
+    &  (pbsVOL / pbsGRANIV) <=  0.66
+    &  (pb80 / pbsGRANIV) <= 0.66
+    ~ "III.1.B.b.iv",
+    
+    TRUE    ~ (TYPO_NATIONALE_APCA_NIV6 )))
+
+####III.2.Exploitation avec élevage laitier####
+
+DONNEES_BASE<-DONNEES_BASE %<>% 
+  mutate(TYPO_NATIONALE_APCA_NIV3=ifelse((TYPO_NATIONALE_APCA_NIV1_AN=="Sous base III IV"
+                                          &TYPO_NATIONALE_APCA_NIV2=="III" 
+                                          & TYPO_NATIONALE_APCA_NIV3=="Exploitation_non_affectée_niv3" 
+                                          & (BOV1>=5 
+                                             | (ELEVQ_301 >= 10 & DIVACTEXP_201 == "1") 
+                                             | (ELEVQ_301 >= 50 & DIVACTEXP_201 =="0") 
+                                             | (ELEVQ_301 >= 50 & DIVACTEXP_201 == "")
+                                             | ELEVQ_402 >= 25)),
+                                         "III.2",
+                                         TYPO_NATIONALE_APCA_NIV3))
+
+####III.2.A.Exploitation avec atelier végétal
+
+#### III.2.A. expl. avec atelier végétal  ####
+DONNEES_BASE<-DONNEES_BASE %<>% 
+  mutate(TYPO_NATIONALE_APCA_NIV4=ifelse(TYPO_NATIONALE_APCA_NIV3=="III.2" 
+                                         & TYPO_NATIONALE_APCA_NIV4=="Exploitation_non_affectée_niv4" 
+                                         & ((CULTSUR_1200!=0 & CULTSUR_0400<= 0.66*CULTSUR_1200 ) | (CULTSUR_GC >= 4000)
+                                            | (CULTSUR_LPC >= 150) 
+                                            | (CULTSUR_0801 >= 150) 
+                                            |  (CULTSUR_0901+ CULTSUR_0916+ CULTSUR_0908+ CULTSUR_0924
+                                                + CULTSUR_0930+ CULTSUR_0806) >= 100 
+                                            |  (CULTSUR_0901+ CULTSUR_0916+ CULTSUR_0908+ CULTSUR_0924
+                                                + CULTSUR_0930+ CULTSUR_0806+ CULTSUR_0801) >= 150
+                                            | (CULTSUR_0913 >= 50) 
+                                            |  (CULTSUR_0958+ CULTSUR_0701+ CULTSUR_0704+ CULTSUR_0705+ CULTSUR_0807+ CULTSUR_0808) > 0 
+                                            | (DEVSUR_compteur > 5) 
+                                            |  (CULTSUR_0506+ CULTSUR_0507) > 0
+                                            | (CULTSUR_0302 > 0) 
+                                            | (CULTSUR_0303 > 0) 
+                                            | (CULTSUR_0304 > 0) 
+                                            | (DEVSUR_01 > 0)),
+                                         "III.2.A",
+                                         TYPO_NATIONALE_APCA_NIV4))
+####III.2.A.a. Exploitation lait polyculteur
+
+DONNEES_BASE<-DONNEES_BASE %<>% 
+  mutate(TYPO_NATIONALE_APCA_NIV5=ifelse(TYPO_NATIONALE_APCA_NIV5=="III.2.A.a",
+                                         "Exploitation_non_affectée_niv5",
+                                         TYPO_NATIONALE_APCA_NIV5))
+
+DONNEES_BASE<-DONNEES_BASE %<>% 
+  mutate(TYPO_NATIONALE_APCA_NIV5=ifelse((TYPO_NATIONALE_APCA_NIV4=="III.2.A" 
+                                          & TYPO_NATIONALE_APCA_NIV5=="Exploitation_non_affectée_niv5" 
+                                          & (BOV2< 10 
+                                             & (UGBAG_herbiv!=0 &( UGBAG_lait2>=(0.85*UGBAG_herbiv) ))
+                                             # (BOV4+BOV5+BOV6+BOV7+BOV8+BOV9+BOV10+BOV11+BOV12+BOV13+BOV14+BOV15)<10
+                                             & ELEVQ_401< 50
+                                             & pbsGRANIV<25000)),
+                                         "III.2.A.a",
+                                         TYPO_NATIONALE_APCA_NIV5))
+
+
+
+
+
+
+
+
+
+####III.2.A.b.Exploitations lait polyculteur polyéleveur 
+###(autres élevages que du lait)
+
+DONNEES_BASE <- DONNEES_BASE %>%
+  mutate(TYPO_NATIONALE_APCA_NIV5 = ifelse((
+    TYPO_NATIONALE_APCA_NIV4 == "III.2.A"
+    & TYPO_NATIONALE_APCA_NIV5 == "Exploitation_non_affectée_niv5" 
+    & (BOV2 >= 10 
+       | (BOV4 + BOV5 + BOV6 + BOV7 + BOV8 + BOV9 + BOV10 + 
+            BOV11 + BOV12 + BOV13 + BOV14  + BOV15) >= 10
+       |UGBAG_lait2< 0.85*UGBAG_herbiv
+       |ELEVQ_401 >= 50
+       |pbsGRANIV >= 25000)),
+    "III.2.A.b",
+    TYPO_NATIONALE_APCA_NIV5))
+
+###########################Declinaisons regionales################
+
+####III.2.B.Exploitations specialisees elevage lait
+
+DONNEES_BASE<-DONNEES_BASE %<>% 
+  mutate(TYPO_NATIONALE_APCA_NIV4=ifelse((TYPO_NATIONALE_APCA_NIV3=="III.2" 
+                                          & TYPO_NATIONALE_APCA_NIV4=="Exploitation_non_affectée_niv4" 
+                                          & (CULTSUR_GC < 4000  
+                                             & ((CULTSUR_0400> 0.66*CULTSUR_1200 ) | CULTSUR_1200 == 0)
+                                             & (CULTSUR_0801 < 150) 
+                                             & ( (CULTSUR_0901+ CULTSUR_0916+ CULTSUR_0908+ CULTSUR_0924+ CULTSUR_0930+ CULTSUR_0806) < 100)
+                                             & ( (CULTSUR_0901+ CULTSUR_0916+ CULTSUR_0908+ CULTSUR_0924+ CULTSUR_0930+ CULTSUR_0806+ CULTSUR_0801) < 150)
+                                             & (CULTSUR_0913 < 50) 
+                                             & ( (CULTSUR_0958+ CULTSUR_0701+ CULTSUR_0704+ CULTSUR_0705+ CULTSUR_0807+ CULTSUR_0808) == 0 ) 
+                                             & (DEVSUR_compteur <= 5) 
+                                             & ( (CULTSUR_0506+ CULTSUR_0507) == 0)
+                                             & (CULTSUR_0302 == 0) 
+                                             & (CULTSUR_0303 == 0) 
+                                             & (DEVSUR_01 == 0)
+                                             & (CULTSUR_0304 == 0) 
+                                             & (CULTSUR_LPC < 150))),
+                                         "III.2.B",
+                                         TYPO_NATIONALE_APCA_NIV4))
+
+####III.2.B.a.Exploitations avec Elevage mixte et activitee laitiere 
+
+DONNEES_BASE<-DONNEES_BASE %<>% 
+  mutate(TYPO_NATIONALE_APCA_NIV5=ifelse((TYPO_NATIONALE_APCA_NIV1_AN=="Sous base III IV"
+                                          &TYPO_NATIONALE_APCA_NIV2=="III" 
+                                          &TYPO_NATIONALE_APCA_NIV3=="III.2" 
+                                          &TYPO_NATIONALE_APCA_NIV4=="III.2.B" 
+                                          & TYPO_NATIONALE_APCA_NIV5=="Exploitation_non_affectée_niv5" 
+                                          & (UGBAG_lait2 < 0.85 * UGBAG_herbiv 
+                                             | pbsGRANIV >= 25000)),
+                                         "III.2.B.a",
+                                         TYPO_NATIONALE_APCA_NIV5))
+
+####III.2.B.b.Exploitation specialisées lait
+
+DONNEES_BASE<-DONNEES_BASE %<>% 
+  mutate(TYPO_NATIONALE_APCA_NIV5=ifelse((TYPO_NATIONALE_APCA_NIV4=="III.2.B" 
+                                          & TYPO_NATIONALE_APCA_NIV5=="Exploitation_non_affectée_niv5" 
+                                          & (UGBAG_herbiv!=0 & UGBAG_lait2 >= 0.85*UGBAG_herbiv)  
+                                          & (pbsGRANIV < 25000)),
+                                         "III.2.B.b",
+                                         TYPO_NATIONALE_APCA_NIV5))
+
+####III.2.B.b.i.Exploitations specialisées bovin lait
+
+DONNEES_BASE <- DONNEES_BASE %>%
+  mutate (TYPO_NATIONALE_APCA_NIV6 = case_when(
+    TYPO_NATIONALE_APCA_NIV1_AN == "Sous base III IV"
+    & TYPO_NATIONALE_APCA_NIV2 == "III"
+    & TYPO_NATIONALE_APCA_NIV3 == "III.2"
+    & TYPO_NATIONALE_APCA_NIV4 == "III.2.B"
+    & TYPO_NATIONALE_APCA_NIV5 == "III.2.B.b"
+    & TYPO_NATIONALE_APCA_NIV6 == "Exploitation_non_affectée_niv6"
+    & UGBAG_BLr2 >= 0.85
+    ~ "III.2.B.b.i",
+    
+    TRUE    ~ (TYPO_NATIONALE_APCA_NIV6)))
+
+####III.2.B.b.i.l1.Laitiers
+
+DONNEES_BASE<-DONNEES_BASE %<>% 
+  mutate(TYPO_NATIONALE_APCA_NIV7=ifelse(TYPO_NATIONALE_APCA_NIV6=="III.2.B.b.i" 
+                                         & TYPO_NATIONALE_APCA_NIV7=="Exploitation_non_affectée_niv7" 
+                                         & (DIVACTEXP_201 == "" 
+                                            | DIVACTEXP_201 == "0"),
+                                         "III.2.B.b.i.l1",
+                                         TYPO_NATIONALE_APCA_NIV7))
+####III.2.B.b.i.l1.h1.Sans SFP
+
+# DONNEES_BASE <- DONNEES_BASE %>%
+#   mutate (TYPO_NATIONALE_APCA_NIV8 = case_when(
+#     TYPO_NATIONALE_APCA_NIV1_AN == "Sous base III IV" 
+#     & TYPO_NATIONALE_APCA_NIV2 == "III"
+#     & TYPO_NATIONALE_APCA_NIV3 == "III.2" 
+#     & TYPO_NATIONALE_APCA_NIV4 == "III.2.B"
+#     & TYPO_NATIONALE_APCA_NIV5 == "III.2.B.b" 
+#     & TYPO_NATIONALE_APCA_NIV6 == "III.2.B.b.i"
+#     & TYPO_NATIONALE_APCA_NIV7 == "III.2.B.b.i.l1" 
+#     & TYPO_NATIONALE_APCA_NIV8 == "Exploitation_non_affectée_niv8"
+#     & (CULTSUR_0400 == 0 
+#        | ((UGBAG_BOV + UGBAG_CAP + UGBAG_OVI + UGBAG_EQU) / 
+#             CULTSUR_0400 >= 4))
+#     ~ "III.2.B.b.i.l1.h1",
+#     
+#     TRUE      ~ (TYPO_NATIONALE_APCA_NIV8)))
+
+####III.2.B.b.i.l1.h2.Fourrage specialisé mais
+
+# DONNEES_BASE <- DONNEES_BASE %>% 
+#   mutate (TYPO_NATIONALE_APCA_NIV8 = case_when(
+#     TYPO_NATIONALE_APCA_NIV1_AN == "Sous base III IV" 
+#     & TYPO_NATIONALE_APCA_NIV2 == "III"
+#     & TYPO_NATIONALE_APCA_NIV3 == "III.2" 
+#     & TYPO_NATIONALE_APCA_NIV4 == "III.2.B"
+#     & TYPO_NATIONALE_APCA_NIV5 == "III.2.B.b" 
+#     & TYPO_NATIONALE_APCA_NIV6 == "III.2.B.b.i"
+#     & TYPO_NATIONALE_APCA_NIV7 == "III.2.B.b.i.l1" 
+#     & TYPO_NATIONALE_APCA_NIV8 == "Exploitation_non_affectée_niv8"
+#     & ((CULTSUR_0400 > 0 
+#         & ((UGBAG_BOV + UGBAG_CAP + UGBAG_OVI + UGBAG_EQU) / CULTSUR_0400) < 4
+#         & CULTSUR_0401 / CULTSUR_0400 >= 0.3))
+#     ~  "III.2.B.b.i.l1.h2",
+#     
+#     TRUE  ~  (TYPO_NATIONALE_APCA_NIV8)))
+
+####III.2.B.b.i.l1.h3.Fourrage mixte mais et herbe
+
+# DONNEES_BASE <- DONNEES_BASE %>%
+#   mutate (TYPO_NATIONALE_APCA_NIV8 = case_when( 
+#     TYPO_NATIONALE_APCA_NIV1_AN == "Sous base III IV" 
+#     & TYPO_NATIONALE_APCA_NIV2 == "III"
+#     & TYPO_NATIONALE_APCA_NIV3 == "III.2" 
+#     & TYPO_NATIONALE_APCA_NIV4 == "III.2.B"
+#     & TYPO_NATIONALE_APCA_NIV5 == "III.2.B.b" 
+#     & TYPO_NATIONALE_APCA_NIV6 == "III.2.B.b.i"
+#     & TYPO_NATIONALE_APCA_NIV7 == "III.2.B.b.i.l1" 
+#     & TYPO_NATIONALE_APCA_NIV8 == "Exploitation_non_affectée_niv8" 
+#     & CULTSUR_0400 > 0 
+#     & ((UGBAG_BOV + UGBAG_CAP + UGBAG_OVI + UGBAG_EQU) / CULTSUR_0400) < 4
+#     & CULTSUR_0401 / CULTSUR_0400 < 0.3 
+#     & CULTSUR_0401 / CULTSUR_0400 >= 0.1 | CULTSUR_0401 / BOV1 >= 15
+#     ~ "III.2.B.b.i.l1.h3",
+#     
+#     TRUE    ~ (TYPO_NATIONALE_APCA_NIV8)))
+
+####III.2.B.b.i.l1.h4.Non autonome
+
+# DONNEES_BASE <- DONNEES_BASE %>%
+#   mutate (TYPO_NATIONALE_APCA_NIV8 = case_when( 
+#     TYPO_NATIONALE_APCA_NIV1_AN == "Sous base III IV" 
+#     & TYPO_NATIONALE_APCA_NIV2 == "III"
+#     & TYPO_NATIONALE_APCA_NIV3 == "III.2" 
+#     & TYPO_NATIONALE_APCA_NIV4 == "III.2.B"
+#     & TYPO_NATIONALE_APCA_NIV5 == "III.2.B.b" 
+#     & TYPO_NATIONALE_APCA_NIV6 == "III.2.B.b.i"
+#     & TYPO_NATIONALE_APCA_NIV7 == "III.2.B.b.i.l1" 
+#     & TYPO_NATIONALE_APCA_NIV8 == "Exploitation_non_affectée_niv8"
+#     & CULTSUR_0400 > 0 
+#     & ((UGBAG_BOV + UGBAG_CAP + UGBAG_OVI + UGBAG_EQU) / CULTSUR_0400) < 4
+#     & (CULTSUR_0401 / CULTSUR_0400) < 0.3 
+#     & (CULTSUR_0401 / CULTSUR_0400) < 0.1 
+#     & (CULTSUR_0401 / BOV1) < 15
+#     & ((UGBAG_BOV + UGBAG_CAP + UGBAG_OVI + UGBAG_EQU) / 
+#          CULTSUR_0400) >= 1.8
+#     ~ "III.2.B.b.i.l1.h4",
+#     
+#     TRUE   ~ (TYPO_NATIONALE_APCA_NIV8)))
+
+####III.2.B.b.i.l1.h5.Fourrage specialisé herbager
+
+# DONNEES_BASE <- DONNEES_BASE %>%
+#   mutate (TYPO_NATIONALE_APCA_NIV8 = case_when(
+#     TYPO_NATIONALE_APCA_NIV1_AN == "Sous base III IV" 
+#     & TYPO_NATIONALE_APCA_NIV2 == "III"
+#     & TYPO_NATIONALE_APCA_NIV3 == "III.2" 
+#     & TYPO_NATIONALE_APCA_NIV4 == "III.2.B"
+#     & TYPO_NATIONALE_APCA_NIV5 == "III.2.B.b" 
+#     & TYPO_NATIONALE_APCA_NIV6 == "III.2.B.b.i"
+#     & TYPO_NATIONALE_APCA_NIV7 == "III.2.B.b.i.l1" 
+#     & TYPO_NATIONALE_APCA_NIV8 == "Exploitation_non_affectée_niv8"
+#     & CULTSUR_0400 > 0 
+#     & ((UGBAG_BOV + UGBAG_CAP + UGBAG_OVI + UGBAG_EQU)/ CULTSUR_0400) < 4
+#     & (CULTSUR_0401 / CULTSUR_0400) < 0.3 
+#     & (CULTSUR_0401 / CULTSUR_0400) < 0.1
+#     & (CULTSUR_0401 / BOV1) < 15 
+#     & ((UGBAG_BOV + UGBAG_CAP + UGBAG_OVI + UGBAG_EQU) /
+#          CULTSUR_0400) < 1.8
+#     ~  "III.2.B.b.i.l1.h5",
+#     
+#     TRUE    ~ (TYPO_NATIONALE_APCA_NIV8)))
+
+####III.2.B.b.i.l2.Fromagers
+
+DONNEES_BASE<-DONNEES_BASE %<>% 
+  mutate(TYPO_NATIONALE_APCA_NIV7=ifelse(TYPO_NATIONALE_APCA_NIV6=="III.2.B.b.i" 
+                                         & TYPO_NATIONALE_APCA_NIV7=="Exploitation_non_affectée_niv7" 
+                                         & (DIVACTEXP_201 == "1"),
+                                         "III.2.B.b.i.l2",
+                                         TYPO_NATIONALE_APCA_NIV7))
+
+
+####III.2.B.b.i.l2.h1.Sans SFP
+
+# DONNEES_BASE <- DONNEES_BASE %>%
+#   mutate (TYPO_NATIONALE_APCA_NIV8 = case_when(
+#     TYPO_NATIONALE_APCA_NIV1_AN == "Sous base III IV"  
+#     & TYPO_NATIONALE_APCA_NIV2 == "III"
+#     & TYPO_NATIONALE_APCA_NIV3 == "III.2" 
+#     & TYPO_NATIONALE_APCA_NIV4 == "III.2.B"
+#     & TYPO_NATIONALE_APCA_NIV5 == "III.2.B.b" 
+#     & TYPO_NATIONALE_APCA_NIV6 == "III.2.B.b.i"
+#     & TYPO_NATIONALE_APCA_NIV7 == "III.2.B.b.i.l2" 
+#     & TYPO_NATIONALE_APCA_NIV8 == "Exploitation_non_affectée_niv8"
+#     & CULTSUR_0400 == 0 |((UGBAG_BOV + UGBAG_CAP + UGBAG_OVI + 
+#                              UGBAG_EQU) / CULTSUR_0400) >= 4
+#     ~ "III.2.B.b.i.l2.h1",
+#     
+#     TRUE    ~ (TYPO_NATIONALE_APCA_NIV8)))
+
+####III.2.B.b.i.l2.h2.Fourrage specialisé mais
+
+# DONNEES_BASE <- DONNEES_BASE %>%
+#   mutate (TYPO_NATIONALE_APCA_NIV8 = case_when(
+#     TYPO_NATIONALE_APCA_NIV1_AN == "Sous base III IV" 
+#     & TYPO_NATIONALE_APCA_NIV2 == "III"
+#     & TYPO_NATIONALE_APCA_NIV3 == "III.2" 
+#     & TYPO_NATIONALE_APCA_NIV4 == "III.2.B"
+#     & TYPO_NATIONALE_APCA_NIV5 == "III.2.B.b"
+#     & TYPO_NATIONALE_APCA_NIV6 == "III.2.B.b.i"
+#     & TYPO_NATIONALE_APCA_NIV7 == "III.2.B.b.i.l2" 
+#     & TYPO_NATIONALE_APCA_NIV8  == "Exploitation_non_affectée_niv8"
+#     & CULTSUR_0400 > 0 
+#     & ((UGBAG_BOV + UGBAG_CAP + UGBAG_OVI + UGBAG_EQU)/
+#          CULTSUR_0400) < 4
+#     & (CULTSUR_0401 / CULTSUR_0400) >= 0.3
+#     ~  "III.2.B.b.i.l2.h2",
+#     
+#     TRUE     ~(TYPO_NATIONALE_APCA_NIV8)))
+
+####III.2.B.b.i.l2.h3.Fourrage mixte mais et herbe
+
+# DONNEES_BASE <- DONNEES_BASE %>%
+#   mutate (TYPO_NATIONALE_APCA_NIV8 = case_when(
+#     TYPO_NATIONALE_APCA_NIV1_AN == "Sous base III IV" 
+#     & TYPO_NATIONALE_APCA_NIV2 == "III"
+#     & TYPO_NATIONALE_APCA_NIV3 == "III.2" 
+#     & TYPO_NATIONALE_APCA_NIV4 == "III.2.B"
+#     & TYPO_NATIONALE_APCA_NIV5 == "III.2.B.b" 
+#     & TYPO_NATIONALE_APCA_NIV6 == "III.2.B.b.i"
+#     & TYPO_NATIONALE_APCA_NIV7 == "III.2.B.b.i.l2" 
+#     & TYPO_NATIONALE_APCA_NIV8 == "Exploitation_non_affectée_niv8"
+#     & CULTSUR_0400 > 0 
+#     & ((UGBAG_BOV + UGBAG_CAP + UGBAG_OVI + UGBAG_EQU) /CULTSUR_0400) < 4
+#     & (CULTSUR_0401 / CULTSUR_0400) < 0.3 
+#     & (CULTSUR_0401 / CULTSUR_0400) >= 0.1 | (CULTSUR_0401 / BOV1) >= 15
+#     ~ "III.2.B.b.i.l2.h3",
+#     
+#     TRUE   ~ (TYPO_NATIONALE_APCA_NIV8)))
+
+####III.2.B.b.i.l2.h4.Non autonome
+
+# DONNEES_BASE <- DONNEES_BASE %>%
+#   mutate (TYPO_NATIONALE_APCA_NIV8 = case_when(
+#     TYPO_NATIONALE_APCA_NIV1_AN == "Sous base III IV" 
+#     & TYPO_NATIONALE_APCA_NIV2 == "III"
+#     & TYPO_NATIONALE_APCA_NIV3 == "III.2" 
+#     & TYPO_NATIONALE_APCA_NIV4 == "III.2.B"
+#     & TYPO_NATIONALE_APCA_NIV5 == "III.2.B.b" 
+#     & TYPO_NATIONALE_APCA_NIV6 == "III.2.B.b.i"
+#     & TYPO_NATIONALE_APCA_NIV7 == "III.2.B.b.i.l2" 
+#     & TYPO_NATIONALE_APCA_NIV8 == "Exploitation_non_affectée_niv8"
+#     & CULTSUR_0400 > 0 
+#     & ((UGBAG_BOV + UGBAG_CAP + UGBAG_OVI + UGBAG_EQU) / CULTSUR_0400) < 4
+#     & (CULTSUR_0401 / CULTSUR_0400) < 0.3 
+#     & (CULTSUR_0401 / CULTSUR_0400) < 0.1
+#     & (CULTSUR_0401 / BOV1 < 15)
+#     & ((UGBAG_BOV + UGBAG_CAP + UGBAG_OVI + UGBAG_EQU) /
+#          CULTSUR_0400) >= 1.8
+#     ~ "III.2.B.b.i.l2.h4",
+#     
+#     TRUE    ~ (TYPO_NATIONALE_APCA_NIV8)))
+
+####III.2.B.b.i.l2.h5.Fourrage specialisé herbager
+
+# DONNEES_BASE <- DONNEES_BASE %>%
+#   mutate (TYPO_NATIONALE_APCA_NIV8 = case_when(
+#     TYPO_NATIONALE_APCA_NIV1_AN == "Sous base III IV" 
+#     & TYPO_NATIONALE_APCA_NIV2 == "III" 
+#     & TYPO_NATIONALE_APCA_NIV3 == "III.2" 
+#     & TYPO_NATIONALE_APCA_NIV4 == "III.2.B" 
+#     & TYPO_NATIONALE_APCA_NIV5 == "III.2.B.b" 
+#     & TYPO_NATIONALE_APCA_NIV6 == "III.2.B.b.i" 
+#     & TYPO_NATIONALE_APCA_NIV7 == "III.2.B.b.i.l2"  
+#     & TYPO_NATIONALE_APCA_NIV8 == "Exploitation_non_affectée_niv8" 
+#     & CULTSUR_0400 > 0  
+#     & ((UGBAG_BOV + UGBAG_CAP + UGBAG_OVI + UGBAG_EQU) /CULTSUR_0400) < 4
+#     & (CULTSUR_0401 / CULTSUR_0400) < 0.3 
+#     & (CULTSUR_0401 / CULTSUR_0400) < 0.1
+#     & (CULTSUR_0401 / BOV1) < 15 
+#     & ((UGBAG_BOV + UGBAG_CAP + UGBAG_OVI + UGBAG_EQU)/CULTSUR_0400) < 1.8
+#     ~ "III.2.B.b.i.l2.h5",
+#     
+#     TRUE   ~ (TYPO_NATIONALE_APCA_NIV8)))
+
+####III.2.B.b.ii.Exploitations specialisées caprin lait 
+
+DONNEES_BASE <- DONNEES_BASE %>%
+  mutate( TYPO_NATIONALE_APCA_NIV6 = case_when(
+    TYPO_NATIONALE_APCA_NIV1_AN == "Sous base III IV"
+    & TYPO_NATIONALE_APCA_NIV2 == "III"
+    & TYPO_NATIONALE_APCA_NIV3 == "III.2"
+    & TYPO_NATIONALE_APCA_NIV4 == "III.2.B"
+    & TYPO_NATIONALE_APCA_NIV5 == "III.2.B.b"
+    & TYPO_NATIONALE_APCA_NIV6 == "Exploitation_non_affectée_niv6"
+    & UGBAG_CLr2 >= 0.85
+    ~ "III.2.B.b.ii",
+    
+    TRUE  ~ (TYPO_NATIONALE_APCA_NIV6)))
+
+####III.2.B.b.ii.l1.Laitiers
+
+DONNEES_BASE<-DONNEES_BASE %<>% 
+  mutate( TYPO_NATIONALE_APCA_NIV7=ifelse(TYPO_NATIONALE_APCA_NIV6=="III.2.B.b.ii" 
+                                          & TYPO_NATIONALE_APCA_NIV7=="Exploitation_non_affectée_niv7" 
+                                          & (DIVACTEXP_201 == "" 
+                                             | DIVACTEXP_201 == "0"),
+                                          "III.2.B.b.ii.l1",
+                                          TYPO_NATIONALE_APCA_NIV7))
+
+####III.2.B.b.ii.l1.p1 Pastoraux
+# 
+# DONNEES_BASE <- DONNEES_BASE %>%
+#   mutate( TYPO_NATIONALE_APCA_NIV8 = case_when(
+#     TYPO_NATIONALE_APCA_NIV1_AN == "Sous base III IV" 
+#     & TYPO_NATIONALE_APCA_NIV3 == "III.2" 
+#     & TYPO_NATIONALE_APCA_NIV4 == "III.2.B"
+#     & TYPO_NATIONALE_APCA_NIV5 == "III.2.B.b" 
+#     & TYPO_NATIONALE_APCA_NIV6 == "III.2.B.b.ii"
+#     & TYPO_NATIONALE_APCA_NIV7 == "III.2.B.b.ii.l1" 
+#     & TYPO_NATIONALE_APCA_NIV8 == "Exploitation_non_affectée_niv8"
+#     & CULTSUR_0408 >= 1000  | PATCOL== "1"
+#     | (CULTSUR_0408 / CULTSUR_1200) >= 0.5
+#     ~ "III.2.B.b.ii.l1.p1",
+#     
+#     TRUE  ~ (TYPO_NATIONALE_APCA_NIV8)))
+
+####III.2.B.b.ii.l1.p2. Non pastoraux 
+
+# DONNEES_BASE <- DONNEES_BASE %>%
+#   mutate( TYPO_NATIONALE_APCA_NIV8 = case_when(
+#     TYPO_NATIONALE_APCA_NIV1_AN == "Sous base III IV" 
+#     & TYPO_NATIONALE_APCA_NIV2 == "III"
+#     & TYPO_NATIONALE_APCA_NIV3 == "III.2" 
+#     & TYPO_NATIONALE_APCA_NIV4 == "III.2.B"
+#     & TYPO_NATIONALE_APCA_NIV5 == "III.2.B.b" 
+#     & TYPO_NATIONALE_APCA_NIV6 == "III.2.B.b.ii"
+#     & TYPO_NATIONALE_APCA_NIV7 == "III.2.B.b.ii.l1" 
+#     & TYPO_NATIONALE_APCA_NIV8 == "Exploitation_non_affectée_niv8"
+#     & CULTSUR_0408 < 1000 
+#     & (PATCOL==  " " | PATCOL== "0")
+#     & (CULTSUR_0408 / CULTSUR_1200) < 0.5
+#     ~ "III.2.B.b.ii.l1.p2",
+#     
+#     TRUE  ~ (TYPO_NATIONALE_APCA_NIV8)))
+
+####III.2.B.b.ii.l1.p2.pat1. paturant
+
+#Remarque:les variables PATDMOIS_CAP PATFMOIS_CAP PATDQUINZ_CAP 
+#et PATFQUINZ_CAP (format numérique) ont été crées é partir des variables 
+#PATDMOIS_1107 PATFMOIS_1107 PATDQUINZ_1107 et PATFQUINZ_1107 (format texte)
+
+# DONNEES_BASE <- DONNEES_BASE %>%
+#   mutate( TYPO_NATIONALE_APCA_NIV9 = case_when(
+#     TYPO_NATIONALE_APCA_NIV1_AN == "Sous base III IV" 
+#     & TYPO_NATIONALE_APCA_NIV2 == "III" 
+#     & TYPO_NATIONALE_APCA_NIV3 == "III.2" 
+#     & TYPO_NATIONALE_APCA_NIV4 == "III.2.B"
+#     & TYPO_NATIONALE_APCA_NIV5 == "III.2.B.b" 
+#     & TYPO_NATIONALE_APCA_NIV6 == "III.2.B.b.ii"
+#     & TYPO_NATIONALE_APCA_NIV7 == "III.2.B.b.ii.l1" 
+#     & TYPO_NATIONALE_APCA_NIV8 == "III.2.B.b.ii.l1.p2"
+#     & TYPO_NATIONALE_APCA_NIV9 == "Exploitation_non_affectée_niv9"
+#     & ((30.5 *PATFMOIS_CAP + 15 *PATFQUINZ_CAP) -
+#          (30.5 *PATDMOIS_CAP + 15 *PATDQUINZ_CAP)) >= 100
+#     & CULTSUR_0408 >= 200
+#     ~ "III.2.B.b.ii.l1.p2.pat1",
+#     
+#     TRUE    ~ (TYPO_NATIONALE_APCA_NIV9)))
+
+
+####III.2.B.b.ii.l1.p2.Pat2.non paturant
+
+# DONNEES_BASE <- DONNEES_BASE %>%
+#   mutate( TYPO_NATIONALE_APCA_NIV9 = case_when( 
+#     TYPO_NATIONALE_APCA_NIV1_AN == "Sous base III IV" 
+#     & TYPO_NATIONALE_APCA_NIV2 == "III"
+#     & TYPO_NATIONALE_APCA_NIV3 == "III.2" 
+#     & TYPO_NATIONALE_APCA_NIV4 == "III.2.B"
+#     & TYPO_NATIONALE_APCA_NIV5 == "III.2.B.b" 
+#     & TYPO_NATIONALE_APCA_NIV6 == "III.2.B.b.ii"
+#     & TYPO_NATIONALE_APCA_NIV7 == "III.2.B.b.ii.l1" 
+#     & TYPO_NATIONALE_APCA_NIV8 == "III.2.B.b.ii.l1.p2"
+#     & TYPO_NATIONALE_APCA_NIV9 == "Exploitation_non_affectée_niv9"
+#     & ((30.5 *PATFMOIS_CAP + 15 *PATFQUINZ_CAP) - 
+#          (30.5 * PATDMOIS_CAP + 15 * PATDQUINZ_CAP)) <100
+#     | CULTSUR_0408 < 200 
+#     ~ "III.2.B.b.ii.l1.p2.pat2",
+#     
+#     TRUE      ~ (TYPO_NATIONALE_APCA_NIV9)))
+
+####III.2.B.b.ii.l1.p2.Pat2.h1 hors sol
+
+# DONNEES_BASE <- DONNEES_BASE %>%
+#   mutate( TYPO_NATIONALE_APCA_NIV10 = case_when(
+#     TYPO_NATIONALE_APCA_NIV1_AN == "Sous base III IV" 
+#     & TYPO_NATIONALE_APCA_NIV2 == "III"
+#     & TYPO_NATIONALE_APCA_NIV3 == "III.2" 
+#     & TYPO_NATIONALE_APCA_NIV4 == "III.2.B"
+#     & TYPO_NATIONALE_APCA_NIV5 == "III.2.B.b" 
+#     & TYPO_NATIONALE_APCA_NIV6 == "III.2.B.b.ii"
+#     & TYPO_NATIONALE_APCA_NIV7 == "III.2.B.b.ii.l1" 
+#     & TYPO_NATIONALE_APCA_NIV8 == "III.2.B.b.ii.l1.p2"
+#     & TYPO_NATIONALE_APCA_NIV9 == "III.2.B.b.ii.l1.p2.pat2" 
+#     & TYPO_NATIONALE_APCA_NIV10 == "Exploitation_non_affectée_niv10"
+#     & CULTSUR_1200 < 500
+#     ~ "III.2.B.b.ii.l1.p2.pat2.h1",
+#     
+#     TRUE    ~ (TYPO_NATIONALE_APCA_NIV10)))
+
+####III.2.B.b.ii.l1.p2.Pat2.h2 non hors sol
+
+# DONNEES_BASE <- DONNEES_BASE %>%
+#   mutate(TYPO_NATIONALE_APCA_NIV10 = case_when(
+#     TYPO_NATIONALE_APCA_NIV1_AN == "Sous base III IV" 
+#     & TYPO_NATIONALE_APCA_NIV2 == "III"
+#     & TYPO_NATIONALE_APCA_NIV3 == "III.2" 
+#     & TYPO_NATIONALE_APCA_NIV4 == "III.2.B"
+#     & TYPO_NATIONALE_APCA_NIV5 == "III.2.B.b" 
+#     & TYPO_NATIONALE_APCA_NIV6 == "III.2.B.b.ii"
+#     & TYPO_NATIONALE_APCA_NIV7 == "III.2.B.b.ii.l1" 
+#     & TYPO_NATIONALE_APCA_NIV8 == "III.2.B.b.ii.l1.p2"
+#     & TYPO_NATIONALE_APCA_NIV10 == "Exploitation_non_affectée_niv10"
+#     & CULTSUR_1200 >= 500
+#     ~ "III.2.B.b.ii.l1.p2.pat2.h2",
+#     
+#     TRUE    ~ (TYPO_NATIONALE_APCA_NIV10)))
+
+####III.2.B.b.ii.l2.Fromagers
+
+DONNEES_BASE<-DONNEES_BASE %<>% 
+  mutate(TYPO_NATIONALE_APCA_NIV7=ifelse(TYPO_NATIONALE_APCA_NIV6=="III.2.B.b.ii" 
+                                         & TYPO_NATIONALE_APCA_NIV7=="Exploitation_non_affectée_niv7" 
+                                         & DIVACTEXP_201 == "1",
+                                         "III.2.B.b.ii.l2",
+                                         TYPO_NATIONALE_APCA_NIV7))
+
+####III.2.B.b.ii.l2.p1 pastoraux
+
+# DONNEES_BASE <- DONNEES_BASE %>%
+#   mutate(
+#     TYPO_NATIONALE_APCA_NIV8 = case_when(
+#       TYPO_NATIONALE_APCA_NIV1_AN == "Sous base III IV" 
+#       & TYPO_NATIONALE_APCA_NIV2 == "III" 
+#       & TYPO_NATIONALE_APCA_NIV3 == "III.2" 
+#       & TYPO_NATIONALE_APCA_NIV4 == "III.2.B"
+#       & TYPO_NATIONALE_APCA_NIV5 == "III.2.B.b" 
+#       & TYPO_NATIONALE_APCA_NIV6 == "III.2.B.b.ii" 
+#       & TYPO_NATIONALE_APCA_NIV7 == "III.2.B.b.ii.l2" 
+#       & TYPO_NATIONALE_APCA_NIV8 == "Exploitation_non_affectée_niv8"
+#       & CULTSUR_0408 >= 1000 | PATCOL == "1" 
+#       | (CULTSUR_0408 / CULTSUR_1200) >= 0.5
+#       ~ "III.2.B.b.ii.l2.p1",
+#       
+#       TRUE   ~ (TYPO_NATIONALE_APCA_NIV8)))
+
+####III.2.B.b.ii.l2.p2.Non pastoraux
+
+# DONNEES_BASE <- DONNEES_BASE %>%
+#   mutate(
+#     TYPO_NATIONALE_APCA_NIV8 = case_when(
+#       TYPO_NATIONALE_APCA_NIV1_AN == "Sous base III IV" 
+#       & TYPO_NATIONALE_APCA_NIV2 == "III"
+#       & TYPO_NATIONALE_APCA_NIV3 == "III.2" 
+#       & TYPO_NATIONALE_APCA_NIV4 == "III.2.B"
+#       & TYPO_NATIONALE_APCA_NIV5 == "III.2.B.b" 
+#       & TYPO_NATIONALE_APCA_NIV6 == "III.2.B.b.ii"
+#       & TYPO_NATIONALE_APCA_NIV7 == "III.2.B.b.ii.l2" 
+#       & TYPO_NATIONALE_APCA_NIV8 == "Exploitation_non_affectée_niv8"
+#       & CULTSUR_0408 < 1000 
+#       & PATCOL== " "  | PATCOL== "0"
+#       & (CULTSUR_0408 / CULTSUR_1200) < 0.5
+#       ~  "III.2.B.b.ii.l2.p2",
+#       
+#       TRUE  ~ (TYPO_NATIONALE_APCA_NIV8)))
+
+####III.2.B.b.ii.l2.p2.pat1. paturant
+
+# DONNEES_BASE <- DONNEES_BASE %>%
+#   mutate(
+#     TYPO_NATIONALE_APCA_NIV9 = case_when(
+#       TYPO_NATIONALE_APCA_NIV1_AN == "Sous base III IV" 
+#       & TYPO_NATIONALE_APCA_NIV2=="III"
+#       & TYPO_NATIONALE_APCA_NIV3=="III.2" 
+#       & TYPO_NATIONALE_APCA_NIV4=="III.2.B"
+#       & TYPO_NATIONALE_APCA_NIV5=="III.2.B.b" 
+#       & TYPO_NATIONALE_APCA_NIV6=="III.2.B.b.ii"
+#       & TYPO_NATIONALE_APCA_NIV7=="III.2.B.b.ii.l2" 
+#       & TYPO_NATIONALE_APCA_NIV8=="III.2.B.b.ii.l2.p2"
+#       & TYPO_NATIONALE_APCA_NIV9=="Exploitation_non_affectée_niv9" 
+#       & ((30.5 *PATFMOIS_CAP + 15 *PATFQUINZ_CAP) -
+#            (30.5 *PATDMOIS_CAP + 15 *PATDQUINZ_CAP)) >= 100 
+#       & CULTSUR_0408 >= 200
+#       ~  "III.2.B.b.ii.l2.p2.pat1",
+#       
+#       TRUE  ~ (TYPO_NATIONALE_APCA_NIV9)))
+
+####III.2.B.b.ii.l2.p2.pat2.Non paturant
+
+# DONNEES_BASE <- DONNEES_BASE %>%
+#   mutate(
+#     TYPO_NATIONALE_APCA_NIV9 = case_when(
+#       TYPO_NATIONALE_APCA_NIV1_AN=="Sous base III IV" 
+#       & TYPO_NATIONALE_APCA_NIV2=="III"
+#       & TYPO_NATIONALE_APCA_NIV3=="III.2" 
+#       & TYPO_NATIONALE_APCA_NIV4=="III.2.B"
+#       & TYPO_NATIONALE_APCA_NIV5=="III.2.B.b" 
+#       & TYPO_NATIONALE_APCA_NIV6=="III.2.B.b.ii"
+#       & TYPO_NATIONALE_APCA_NIV7=="III.2.B.b.ii.l2" 
+#       & TYPO_NATIONALE_APCA_NIV8=="III.2.B.b.ii.l2.p2"
+#       & TYPO_NATIONALE_APCA_NIV9=="Exploitation_non_affectée_niv9" 
+#       & ((30.5 *PATFMOIS_CAP + 15 *PATFQUINZ_CAP) -
+#            (30.5 *PATDMOIS_CAP + 15 *PATDQUINZ_CAP)) < 100  
+#       | CULTSUR_0408 < 200
+#       ~  "III.2.B.b.ii.l2.p2.pat2",
+#       
+#       TRUE   ~  (TYPO_NATIONALE_APCA_NIV9)))
+
+####III.2.B.b.ii.l2.p2.Pat2.h1 hors sol
+
+# DONNEES_BASE <- DONNEES_BASE %>%
+#   mutate(
+#     TYPO_NATIONALE_APCA_NIV10 = case_when(
+#       TYPO_NATIONALE_APCA_NIV1_AN=="Sous base III IV" 
+#       & TYPO_NATIONALE_APCA_NIV2 == "III"
+#       & TYPO_NATIONALE_APCA_NIV3 == "III.2" 
+#       & TYPO_NATIONALE_APCA_NIV4 == "III.2.B"
+#       & TYPO_NATIONALE_APCA_NIV5 == "III.2.B.b" 
+#       & TYPO_NATIONALE_APCA_NIV6 == "III.2.B.b.ii"
+#       & TYPO_NATIONALE_APCA_NIV7 == "III.2.B.b.ii.l2" 
+#       & TYPO_NATIONALE_APCA_NIV8 == "III.2.B.b.ii.l2.p2"
+#       & TYPO_NATIONALE_APCA_NIV9 == "III.2.B.b.ii.l2.p2.pat2" 
+#       & TYPO_NATIONALE_APCA_NIV10 == "Exploitation_non_affectée_niv10"
+#       & CULTSUR_1200 < 500
+#       ~  "III.2.B.b.ii.l2.p2.pat2.h1",
+#       
+#       TRUE   ~  (TYPO_NATIONALE_APCA_NIV10)))
+
+####III.2.B.b.ii.l2.p2.pat2.h2 non hors sol 
+
+# DONNEES_BASE <- DONNEES_BASE %>%
+#   mutate(
+#     TYPO_NATIONALE_APCA_NIV10 = case_when(
+#       TYPO_NATIONALE_APCA_NIV1_AN == "Sous base III IV" 
+#       & TYPO_NATIONALE_APCA_NIV2 == "III" 
+#       & TYPO_NATIONALE_APCA_NIV3 == "III.2" 
+#       & TYPO_NATIONALE_APCA_NIV4 == "III.2.B" 
+#       & TYPO_NATIONALE_APCA_NIV5 == "III.2.B.b" 
+#       & TYPO_NATIONALE_APCA_NIV6 == "III.2.B.b.ii"
+#       & TYPO_NATIONALE_APCA_NIV7 == "III.2.B.b.ii.l2" 
+#       & TYPO_NATIONALE_APCA_NIV8 == "III.2.B.b.ii.l2.p2" 
+#       & TYPO_NATIONALE_APCA_NIV9 == "III.2.B.b.ii.l2.p2.pat2" 
+#       & TYPO_NATIONALE_APCA_NIV10 == "Exploitation_non_affectée_niv10" 
+#       & CULTSUR_1200 >= 500
+#       ~  "III.2.B.b.ii.l2.p2.pat2.h2",
+#       
+#       TRUE  ~  (TYPO_NATIONALE_APCA_NIV10)))
+
+####III.2.B.b.iii.Exploitations specialisées ovin lait 
+
+DONNEES_BASE<-DONNEES_BASE %<>% 
+  mutate( TYPO_NATIONALE_APCA_NIV6=ifelse(TYPO_NATIONALE_APCA_NIV5=="III.2.B.b" 
+                                          & TYPO_NATIONALE_APCA_NIV6=="Exploitation_non_affectée_niv6" 
+                                          & (UGBAG_OLr2 >= 0.85),
+                                          "III.2.B.b.iii",
+                                          TYPO_NATIONALE_APCA_NIV6))
+
+####III.2.B.b.iii.l1. laities
+
+DONNEES_BASE<-DONNEES_BASE %<>% 
+  mutate( TYPO_NATIONALE_APCA_NIV7=ifelse(TYPO_NATIONALE_APCA_NIV6=="III.2.B.b.iii" 
+                                          & TYPO_NATIONALE_APCA_NIV7=="Exploitation_non_affectée_niv7" 
+                                          & (DIVACTEXP_201 == "" 
+                                             | DIVACTEXP_201 == "0"),
+                                          "III.2.B.b.iii.l1",
+                                          TYPO_NATIONALE_APCA_NIV7))
+
+####III.2.B.b.iii.l1.p1. Pastoraux
+
+# DONNEES_BASE <- DONNEES_BASE %>%
+#   mutate(
+#     TYPO_NATIONALE_APCA_NIV8 = case_when(
+#       TYPO_NATIONALE_APCA_NIV1_AN == "Sous base III IV" 
+#       & TYPO_NATIONALE_APCA_NIV2 == "III"
+#       & TYPO_NATIONALE_APCA_NIV3 == "III.2" 
+#       & TYPO_NATIONALE_APCA_NIV4 == "III.2.B"
+#       & TYPO_NATIONALE_APCA_NIV5 == "III.2.B.b" 
+#       & TYPO_NATIONALE_APCA_NIV6 == "III.2.B.b.iii"
+#       & TYPO_NATIONALE_APCA_NIV7 == "III.2.B.b.iii.l1" 
+#       & TYPO_NATIONALE_APCA_NIV8 == "Exploitation_non_affectée_niv8"
+#       & PATCOL == "1" | (CULTSUR_0408 / CULTSUR_0400) >= 0.5
+#       ~   "III.2.B.b.iii.l1.p1",
+#       
+#       TRUE   ~  (TYPO_NATIONALE_APCA_NIV8)))
+
+####III.2.B.b.iii.l1.p2. Non pastoraux
+
+# DONNEES_BASE <- DONNEES_BASE %>%
+#   mutate(
+#     TYPO_NATIONALE_APCA_NIV8 = case_when(
+#       TYPO_NATIONALE_APCA_NIV1_AN == "Sous base III IV" 
+#       & TYPO_NATIONALE_APCA_NIV2 == "III"
+#       & TYPO_NATIONALE_APCA_NIV3 == "III.2" 
+#       & TYPO_NATIONALE_APCA_NIV4 == "III.2.B"
+#       & TYPO_NATIONALE_APCA_NIV5 == "III.2.B.b" 
+#       & TYPO_NATIONALE_APCA_NIV6 == "III.2.B.b.iii"
+#       & TYPO_NATIONALE_APCA_NIV7 == "III.2.B.b.iii.l1" 
+#       & TYPO_NATIONALE_APCA_NIV8 == "Exploitation_non_affectée_niv8"
+#       & (PATCOL == "0" | PATCOL == " ") 
+#       & ( CULTSUR_0408 / CULTSUR_0400) < 0.5
+#       ~  "III.2.B.b.iii.l1.p2",
+#       
+#       TRUE    ~  (TYPO_NATIONALE_APCA_NIV8)))
+
+#### III.2.B.b.iii.l2.  fromagers  ####
+DONNEES_BASE<-DONNEES_BASE %<>% 
+  mutate(TYPO_NATIONALE_APCA_NIV7=ifelse(TYPO_NATIONALE_APCA_NIV6=="III.2.B.b.iii" 
+                                         & TYPO_NATIONALE_APCA_NIV7=="Exploitation_non_affectée_niv7" 
+                                         & DIVACTEXP_201 == "1",
+                                         "III.2.B.b.iii.l2",
+                                         TYPO_NATIONALE_APCA_NIV7))
+
+
+####III.2.B.b.iii.l2.p1. Pastoraux
+
+# DONNEES_BASE <- DONNEES_BASE %>%
+#   mutate( 
+#     TYPO_NATIONALE_APCA_NIV8 = case_when(
+#       TYPO_NATIONALE_APCA_NIV1_AN == "Sous base III IV" 
+#       & TYPO_NATIONALE_APCA_NIV2 == "III"
+#       & TYPO_NATIONALE_APCA_NIV3 == "III.2" 
+#       & TYPO_NATIONALE_APCA_NIV4 == "III.2.B"
+#       & TYPO_NATIONALE_APCA_NIV5 == "III.2.B.b" 
+#       & TYPO_NATIONALE_APCA_NIV6 == "III.2.B.b.iii"
+#       & TYPO_NATIONALE_APCA_NIV7 == "III.2.B.b.iii.l2" 
+#       & TYPO_NATIONALE_APCA_NIV8 == "Exploitation_non_affectée_niv8"
+#       & PATCOL == "1" | (CULTSUR_0408 / CULTSUR_0400) >= 0.5
+#       ~   "III.2.B.b.iii.l2.p1",
+#       
+#       TRUE    ~  (TYPO_NATIONALE_APCA_NIV8)))
+
+####III.2.B.b.iii.l2.p2. Non pastoraux
+
+# DONNEES_BASE <- DONNEES_BASE %>%
+#   mutate(
+#     TYPO_NATIONALE_APCA_NIV8 = case_when(
+#       TYPO_NATIONALE_APCA_NIV1_AN == "Sous base III IV" 
+#       & TYPO_NATIONALE_APCA_NIV2 == "III" 
+#       & TYPO_NATIONALE_APCA_NIV3 == "III.2" 
+#       & TYPO_NATIONALE_APCA_NIV4 == "III.2.B"
+#       & TYPO_NATIONALE_APCA_NIV5 == "III.2.B.b" 
+#       & TYPO_NATIONALE_APCA_NIV6 == "III.2.B.b.iii"
+#       & TYPO_NATIONALE_APCA_NIV7 == "III.2.B.b.iii.l2" 
+#       & TYPO_NATIONALE_APCA_NIV8 == "Exploitation_non_affectée_niv8"
+#       & PATCOL == "0" | PATCOL == " " 
+#       & (CULTSUR_0408 / CULTSUR_0400) < 0.5
+#       ~   "III.2.B.b.iii.l2.p2",
+#       
+#       TRUE   ~  (TYPO_NATIONALE_APCA_NIV8)))
+
+####III.2.B.b.iv.Exploitation mixte lait
+
+DONNEES_BASE<-DONNEES_BASE %<>% 
+  mutate( TYPO_NATIONALE_APCA_NIV6=ifelse(TYPO_NATIONALE_APCA_NIV5=="III.2.B.b" 
+                                          & TYPO_NATIONALE_APCA_NIV6=="Exploitation_non_affectée_niv6" 
+                                          & (UGBAG_BLr2 < 0.85
+                                             &  UGBAG_CLr2 < 0.85
+                                             &  UGBAG_OLr2 < 0.85),
+                                          "III.2.B.b.iv",
+                                          TYPO_NATIONALE_APCA_NIV6))
+
+###################### IV.Exploitation avec elevage granivores#######
+
+#Remarque:Fichier source : III IV 
+
+DONNEES_BASE<-DONNEES_BASE %<>% 
+  mutate(TYPO_NATIONALE_APCA_NIV2=ifelse(TYPO_NATIONALE_APCA_NIV1_AN=="Sous base III IV" 
+                                         & TYPO_NATIONALE_APCA_NIV2=="Exploitation_non_affectée_niv2" 
+                                         & (BOV1< 5 
+                                            &  BOV2 < 10 
+                                            &  (BOV4+ BOV5+ BOV6+ BOV7+ BOV8+ BOV9
+                                                + BOV10+ BOV11+ BOV12+ BOV13+ BOV14 + BOV15) <10 
+                                            & ((ELEVQ_301 < 10 & DIVACTEXP_201 == "1") 
+                                               | (ELEVQ_301 < 50 & DIVACTEXP_201 =="0") 
+                                               | (ELEVQ_301 < 50 & DIVACTEXP_201 == ""))
+                                            & ELEVQ_401< 50  
+                                            & ELEVQ_402 < 25),
+                                         "IV",
+                                         TYPO_NATIONALE_APCA_NIV2))
+
+####IV.1.Exploiation avec atelier végétal####
+
+DONNEES_BASE<-DONNEES_BASE %<>% 
+  mutate(TYPO_NATIONALE_APCA_NIV3=ifelse(TYPO_NATIONALE_APCA_NIV2=="IV" 
+                                         & TYPO_NATIONALE_APCA_NIV3=="Exploitation_non_affectée_niv3" 
+                                         & ((CULTSUR_1200!=0& CULTSUR_0400<= 0.66*CULTSUR_1200  ) | (CULTSUR_GC >= 4000) 
+                                            | (CULTSUR_LPC >= 150)
+                                            | (CULTSUR_0801 >= 150) 
+                                            | ((CULTSUR_0901+ CULTSUR_0916+ CULTSUR_0908+ CULTSUR_0924
+                                                + CULTSUR_0930+ CULTSUR_0806) >= 100)
+                                            | ((CULTSUR_0901+ CULTSUR_0916+ CULTSUR_0908+ CULTSUR_0924
+                                                + CULTSUR_0930+ CULTSUR_0806+ CULTSUR_0801) >= 150) 
+                                            | (CULTSUR_0913 >= 50) 
+                                            | ((CULTSUR_0958+ CULTSUR_0701+ CULTSUR_0704+ CULTSUR_0705
+                                                + CULTSUR_0807+ CULTSUR_0808) > 0) 
+                                            | (DEVSUR_compteur > 5) 
+                                            | ((CULTSUR_0506+ CULTSUR_0507) > 0) 
+                                            | (CULTSUR_0302 > 0) 
+                                            | (CULTSUR_0303 > 0) 
+                                            | (DEVSUR_01 > 0)
+                                            | (CULTSUR_0304 > 0)),
+                                         "IV.1",
+                                         TYPO_NATIONALE_APCA_NIV3))
+
+####IV.2. Exploitations specialisées granivore####
+
+DONNEES_BASE<-DONNEES_BASE %<>% 
+  mutate(TYPO_NATIONALE_APCA_NIV3=ifelse(TYPO_NATIONALE_APCA_NIV2=="IV" 
+                                         & TYPO_NATIONALE_APCA_NIV3=="Exploitation_non_affectée_niv3" 
+                                         & (CULTSUR_GC < 4000  
+                                            & (( CULTSUR_0400> 0.66*CULTSUR_1200 ) | CULTSUR_1200 == 0) 
+                                            & (CULTSUR_0801 < 150) 
+                                            & ( (CULTSUR_0901+ CULTSUR_0916+ CULTSUR_0908
+                                                 + CULTSUR_0924+ CULTSUR_0930+ CULTSUR_0806) < 100) 
+                                            & ( (CULTSUR_0901+ CULTSUR_0916+ CULTSUR_0908
+                                                 + CULTSUR_0924+ CULTSUR_0930+ CULTSUR_0806+ CULTSUR_0801) < 150) 
+                                            & (CULTSUR_0913 < 50) 
+                                            & ( (CULTSUR_0958+ CULTSUR_0701+ CULTSUR_0704
+                                                 + CULTSUR_0705+ CULTSUR_0807+ CULTSUR_0808) == 0 ) 
+                                            & (DEVSUR_compteur <= 5) 
+                                            & ((CULTSUR_0506+ CULTSUR_0507) == 0)
+                                            & (CULTSUR_0302 == 0) 
+                                            & (CULTSUR_0303 == 0) 
+                                            & (DEVSUR_01 == 0)
+                                            & (CULTSUR_0304 == 0) 
+                                            & CULTSUR_LPC < 150), 
+                                         "IV.2",
+                                         TYPO_NATIONALE_APCA_NIV3))
+
+####IV.2.A.Exploitations specialisées volaille
+
+DONNEES_BASE<-DONNEES_BASE %<>% 
+  mutate(TYPO_NATIONALE_APCA_NIV4=ifelse(TYPO_NATIONALE_APCA_NIV3=="IV.2" 
+                                         & TYPO_NATIONALE_APCA_NIV4=="Exploitation_non_affectée_niv4" 
+                                         & (pbsGRANIV!=0 & pbsVOL  >= 0.66* pbsGRANIV),
+                                         "IV.2.A",
+                                         TYPO_NATIONALE_APCA_NIV4))
+
+####IV.2.A.v3. Volaille reproduction
+
+DONNEES_BASE <- DONNEES_BASE %>%
+  mutate(TYPO_NATIONALE_APCA_NIV5 = ifelse((
+    TYPO_NATIONALE_APCA_NIV1_AN == "Sous base III IV" 
+    & TYPO_NATIONALE_APCA_NIV2 == "IV"
+    & TYPO_NATIONALE_APCA_NIV3 == "IV.2" 
+    & TYPO_NATIONALE_APCA_NIV4 == "IV.2.A"
+    & TYPO_NATIONALE_APCA_NIV5 == "Exploitation_non_affectée_niv5"
+    & (ELEVQ_702 + ELEVQ_711) >= 500),
+    "IV.2.A.v3",
+    TYPO_NATIONALE_APCA_NIV5))
+
+
+####IV.2.A.v4.Palmipédes gras 
+
+DONNEES_BASE <- DONNEES_BASE %>%
+  mutate(TYPO_NATIONALE_APCA_NIV5 = ifelse((
+    TYPO_NATIONALE_APCA_NIV1_AN == "Sous base III IV" 
+    & TYPO_NATIONALE_APCA_NIV2 == "IV"
+    & TYPO_NATIONALE_APCA_NIV3 == "IV.2" 
+    & TYPO_NATIONALE_APCA_NIV4 == "IV.2.A"
+    & TYPO_NATIONALE_APCA_NIV5 == "Exploitation_non_affectée_niv5"
+    & (((ELEVQ_706 + ELEVQ_708) >= 100) | (GAVAGEVOL == "1"))),
+    "IV.2.A.v4",
+    TYPO_NATIONALE_APCA_NIV5))
+
+####IV.2.A.v1.Volaille chair
+
+DONNEES_BASE<-DONNEES_BASE %<>% 
+  mutate(TYPO_NATIONALE_APCA_NIV5=ifelse((TYPO_NATIONALE_APCA_NIV1_AN == "Sous base III IV" 
+                                          & TYPO_NATIONALE_APCA_NIV2 == "IV"
+                                          & TYPO_NATIONALE_APCA_NIV3 == "IV.2" 
+                                          & TYPO_NATIONALE_APCA_NIV4 == "IV.2.A"
+                                          & TYPO_NATIONALE_APCA_NIV5 == "Exploitation_non_affectée_niv5"
+                                          & ELEVQ_721 >=500 
+                                          & (ELEVQ_701+ ELEVQ_703)<3000
+                                          & (ELEVQ_702 + ELEVQ_711) < 500),
+                                         "IV.2.A.v1",
+                                         TYPO_NATIONALE_APCA_NIV5))
+####IV.2.A.v2.Volaille pondeuse
+
+DONNEES_BASE <- DONNEES_BASE %>%  
+  mutate (TYPO_NATIONALE_APCA_NIV5 = case_when(
+    TYPO_NATIONALE_APCA_NIV1_AN == "Sous base III IV" 
+    & TYPO_NATIONALE_APCA_NIV2 == "IV"
+    & TYPO_NATIONALE_APCA_NIV3 == "IV.2" 
+    & TYPO_NATIONALE_APCA_NIV4 == "IV.2.A"
+    & TYPO_NATIONALE_APCA_NIV5 == "Exploitation_non_affectée_niv5"
+    & (ELEVQ_701 + ELEVQ_703) >= 1000
+    ~  "IV.2.A.v2",
+    
+    TRUE    ~  (TYPO_NATIONALE_APCA_NIV5)))
+
+
+####Filtre supplementaire volailles####
+
+DONNEES_BASE<-DONNEES_BASE %<>% 
+  mutate(TYPO_NATIONALE_APCA_NIV5=ifelse((TYPO_NATIONALE_APCA_NIV4=="IV.2.A" 
+                                          & TYPO_NATIONALE_APCA_NIV5=="Exploitation_non_affectée_niv5" 
+                                          &((ELEVQ_721>=150) 
+                                            | ((ELEVQ_704+ ELEVQ_705+ ELEVQ_707+ ELEVQ_709) >=200))),
+                                         "IV.2.A.v1",
+                                         TYPO_NATIONALE_APCA_NIV5))
+
+
+DONNEES_BASE <- DONNEES_BASE %>%
+  mutate (TYPO_NATIONALE_APCA_NIV5 = ifelse((
+    TYPO_NATIONALE_APCA_NIV4 == "IV.2.A" 
+    & TYPO_NATIONALE_APCA_NIV5 == "Exploitation_non_affectée_niv5"
+    & ((ELEVQ_710 >= 30) | (ELEVQ_712 >= 200) |(ELEVQ_713 >= 200))),
+    "IV.2.A.v5",
+    TYPO_NATIONALE_APCA_NIV5))
+
+
+DONNEES_BASE <- DONNEES_BASE %>%
+  mutate(TYPO_NATIONALE_APCA_NIV5 = ifelse((
+    TYPO_NATIONALE_APCA_NIV4 == "IV.2.A" 
+    & TYPO_NATIONALE_APCA_NIV5 == "Exploitation_non_affectée_niv5"
+    & (((ELEVQ_701 + ELEVQ_703) >= 200 )| ((ELEVQ_720 >= 200 )& ((ELEVQ_702 + ELEVQ_711) <= 200)))),
+    "IV.2.A.v2",
+    TYPO_NATIONALE_APCA_NIV5))
+
+
+
+
+####IV.2.A.v1.cc1/Circuit court
+
+# DONNEES_BASE <- DONNEES_BASE %>%
+#   mutate( TYPO_NATIONALE_APCA_NIV6 = case_when(
+#     TYPO_NATIONALE_APCA_NIV1_AN == "Sous base III IV" 
+#     & TYPO_NATIONALE_APCA_NIV2 == "IV"
+#     & TYPO_NATIONALE_APCA_NIV3 == "IV.2" 
+#     & TYPO_NATIONALE_APCA_NIV4 == "IV.2.A"
+#     & TYPO_NATIONALE_APCA_NIV5 == "IV.2.A.v1" 
+#     & TYPO_NATIONALE_APCA_NIV6 == "Exploitation_non_affectée_niv6"
+#     & CIRCOUCA_402 == "4"  | CIRCOUCA_402 == "3"
+#     ~  "IV.2.A.v1.cc1",
+#     
+#     TRUE  ~  (TYPO_NATIONALE_APCA_NIV6)))
+
+####IV.2.A.v1.cc2.Filiére organisée 
+
+# DONNEES_BASE <- DONNEES_BASE %>%
+#   mutate( TYPO_NATIONALE_APCA_NIV6 = case_when(
+#     TYPO_NATIONALE_APCA_NIV1_AN=="Sous base III IV" 
+#     & TYPO_NATIONALE_APCA_NIV2 == "IV"
+#     & TYPO_NATIONALE_APCA_NIV3 == "IV.2" 
+#     & TYPO_NATIONALE_APCA_NIV4 == "IV.2.A"
+#     & TYPO_NATIONALE_APCA_NIV5 == "IV.2.A.v1" 
+#     & TYPO_NATIONALE_APCA_NIV6 == "Exploitation_non_affectée_niv6" 
+#     & CIRCOUCA_402 == "2" |CIRCOUCA_402 == "1" |CIRCOUCA_402 == "0"
+#     | CIRCOUCA_402 == " "
+#     ~  "IV.2.A.v1.cc2",
+#     
+#     TRUE  ~  (TYPO_NATIONALE_APCA_NIV6)))
+
+####IV.2.A.v1.cc2.q1.Label et démarche qualité
+
+# DONNEES_BASE <- DONNEES_BASE %>%
+#   mutate( TYPO_NATIONALE_APCA_NIV7 = case_when(
+#     TYPO_NATIONALE_APCA_NIV1_AN == "Sous base III IV" 
+#     & TYPO_NATIONALE_APCA_NIV2 == "IV"
+#     & TYPO_NATIONALE_APCA_NIV3 == "IV.2" 
+#     & TYPO_NATIONALE_APCA_NIV4 == "IV.2.A"
+#     & TYPO_NATIONALE_APCA_NIV5 == "IV.2.A.v1" 
+#     & TYPO_NATIONALE_APCA_NIV6 == "IV.2.A.v1.cc2"
+#     & TYPO_NATIONALE_APCA_NIV7 == "Exploitation_non_affectée_niv7" 
+#     & IGP_112 == "1" | AOC_112 == "1" | LABEL_112 == "1" 
+#     | CONFORM_112 == "1" | AUTQUAL_112 == "1" | BIOFIL == "1"
+#     ~  "IV.2.A.v1.cc2.q1",
+#     
+#     TRUE  ~  (TYPO_NATIONALE_APCA_NIV7)))
+
+####IV.2.A.v1.cc2.q2.Standard
+
+# DONNEES_BASE <- DONNEES_BASE %>%
+#   mutate (TYPO_NATIONALE_APCA_NIV7 = case_when(
+#     TYPO_NATIONALE_APCA_NIV1_AN == "Sous base III IV" 
+#     & TYPO_NATIONALE_APCA_NIV2 == "IV"
+#     & TYPO_NATIONALE_APCA_NIV3 == "IV.2" 
+#     & TYPO_NATIONALE_APCA_NIV4 == "IV.2.A"
+#     & TYPO_NATIONALE_APCA_NIV5 == "IV.2.A.v1" 
+#     & TYPO_NATIONALE_APCA_NIV6 ==  "IV.2.A.v1.cc2"
+#     & TYPO_NATIONALE_APCA_NIV7 == "Exploitation_non_affectée_niv7" 
+#     & IGP_112 == "0" | IGP_112 == " "
+#     & AOC_112 == "0" | AOC_112 == " "
+#     & LABEL_112 == "0" | LABEL_112 == " "
+#     & CONFORM_112 == "0" | CONFORM_112 == " "
+#     & AUTQUAL_112 == "0" | AUTQUAL_112 == " " 
+#     & BIOFIL == "0" | BIOFIL == " "
+#     ~  "IV.2.A.v1.cc2.q2",
+#     
+#     TRUE ~  (TYPO_NATIONALE_APCA_NIV7)))
+
+####IV.2.A.v2.cg1.Cage
+
+# DONNEES_BASE <- DONNEES_BASE %>%
+#   mutate( TYPO_NATIONALE_APCA_NIV6 = case_when(
+#     TYPO_NATIONALE_APCA_NIV1_AN == "Sous base III IV" 
+#     & TYPO_NATIONALE_APCA_NIV2 == "IV"
+#     & TYPO_NATIONALE_APCA_NIV3 == "IV.2" 
+#     & TYPO_NATIONALE_APCA_NIV4 == "IV.2.A"
+#     & TYPO_NATIONALE_APCA_NIV5 == "IV.2.A.v2" 
+#     & TYPO_NATIONALE_APCA_NIV6 == "Exploitation_non_affectée_niv6"
+#     & ELEVQ_714 == 0   & ELEVQ_719 == 0
+#     ~  "IV.2.A.v2.cg1",
+#     
+#     TRUE ~ (TYPO_NATIONALE_APCA_NIV6)))
+
+####IV.2.A.v2.cg2.Systémes alternatifs
+
+# DONNEES_BASE <- DONNEES_BASE %>%
+#   mutate( TYPO_NATIONALE_APCA_NIV6 = case_when(
+#     TYPO_NATIONALE_APCA_NIV1_AN == "Sous base III IV" 
+#     & TYPO_NATIONALE_APCA_NIV2 == "IV"
+#     & TYPO_NATIONALE_APCA_NIV3 == "IV.2" 
+#     & TYPO_NATIONALE_APCA_NIV4 == "IV.2.A"
+#     & TYPO_NATIONALE_APCA_NIV5 == "IV.2.A.v2" 
+#     & TYPO_NATIONALE_APCA_NIV6 == "Exploitation_non_affectée_niv6" 
+#     & ELEVQ_714 > 0 | ELEVQ_719 > 0
+#     ~  "IV.2.A.v2.cg2",
+#     
+#     TRUE  ~ (TYPO_NATIONALE_APCA_NIV6)))
+
+#### IV.2.B. expl. spécialisées porcin  ####
+DONNEES_BASE<-DONNEES_BASE %<>% 
+  mutate(TYPO_NATIONALE_APCA_NIV4=ifelse(TYPO_NATIONALE_APCA_NIV3=="IV.2" 
+                                         & TYPO_NATIONALE_APCA_NIV4=="Exploitation_non_affectée_niv4" 
+                                         & (pbsGRANIV!=0 & (pbsPORC  >= 0.66* pbsGRANIV)),
+                                         "IV.2.B",
+                                         TYPO_NATIONALE_APCA_NIV4))
+
+#### IV.2.B.ne1. naisseurs  ####
+DONNEES_BASE<-DONNEES_BASE %<>% 
+  mutate(TYPO_NATIONALE_APCA_NIV5=ifelse((TYPO_NATIONALE_APCA_NIV4=="IV.2.B" 
+                                          & TYPO_NATIONALE_APCA_NIV5=="Exploitation_non_affectée_niv5"
+                                          & (ELEVQ_514 <= 2* ELEVQ_501)
+                                          &ELEVQ_501!=0),
+                                         "IV.2.B.ne1",
+                                         TYPO_NATIONALE_APCA_NIV5))
+
+####Distinguer les maternitées collectives ####: UTA importants 
+#et nombre de truies important
+
+####IV.2.B.ne1.z1.Lien au sol faible
+
+# DONNEES_BASE <- DONNEES_BASE %>%
+#   mutate(TYPO_NATIONALE_APCA_NIV6 = case_when(
+#     TYPO_NATIONALE_APCA_NIV1_AN == "Sous base III IV" 
+#     & TYPO_NATIONALE_APCA_NIV2 == "IV" 
+#     & TYPO_NATIONALE_APCA_NIV3 == "IV.2" 
+#     & TYPO_NATIONALE_APCA_NIV4 == "IV.2.B"
+#     & TYPO_NATIONALE_APCA_NIV5 == "IV.2.B.ne1" 
+#     & TYPO_NATIONALE_APCA_NIV6 == "Exploitation_non_affectée_niv6"
+#     & ( CULTSUR_GC / ELEVQ_501) < 10
+#     ~  "IV.2.B.ne1.z1",
+#     
+#     TRUE   ~  (TYPO_NATIONALE_APCA_NIV6)))
+
+####IV.2.B.ne1.z2.Compromis entre épandage et alimentaire
+
+# DONNEES_BASE <- DONNEES_BASE %>%
+#   mutate(TYPO_NATIONALE_APCA_NIV6 = case_when(
+#     TYPO_NATIONALE_APCA_NIV1_AN == "Sous base III IV" 
+#     & TYPO_NATIONALE_APCA_NIV2 == "IV"
+#     & TYPO_NATIONALE_APCA_NIV3 == "IV.2" 
+#     & TYPO_NATIONALE_APCA_NIV4 == "IV.2.B"
+#     & TYPO_NATIONALE_APCA_NIV5 == "IV.2.B.ne1" 
+#     & TYPO_NATIONALE_APCA_NIV6 == "Exploitation_non_affectée_niv6"
+#     & (CULTSUR_GC / ELEVQ_501) >= 10 
+#     & (CULTSUR_GC / ELEVQ_501) < 15
+#     ~  "IV.2.B.ne1.z2",
+#     
+#     TRUE  ~  (TYPO_NATIONALE_APCA_NIV6)))
+
+####IV.2.B.ne1.z3.Autonomie d'épandage sans autonomie alimentaire
+
+# DONNEES_BASE <- DONNEES_BASE %>%
+#   mutate(TYPO_NATIONALE_APCA_NIV6 = case_when(
+#     TYPO_NATIONALE_APCA_NIV1_AN == "Sous base III IV" 
+#     & TYPO_NATIONALE_APCA_NIV2 == "IV" 
+#     & TYPO_NATIONALE_APCA_NIV3 == "IV.2" 
+#     & TYPO_NATIONALE_APCA_NIV4 == "IV.2.B"
+#     & TYPO_NATIONALE_APCA_NIV5 == "IV.2.B.ne1" 
+#     & TYPO_NATIONALE_APCA_NIV6 == "Exploitation_non_affectée_niv6"
+#     & (CULTSUR_GC / ELEVQ_501) >= 15 
+#     & (CULTSUR_GC / ELEVQ_501) < 17
+#     ~ "IV.2.B.ne1.z3",
+#     
+#     TRUE    ~ (TYPO_NATIONALE_APCA_NIV6)))
+
+####IV.2.B.ne1.z4.Autonomie d'épandage et autonomie alimentaire
+
+# DONNEES_BASE <- DONNEES_BASE %>%
+#   mutate(TYPO_NATIONALE_APCA_NIV6 = case_when( 
+#     TYPO_NATIONALE_APCA_NIV1_AN == "Sous base III IV" 
+#     & TYPO_NATIONALE_APCA_NIV2 == "IV"
+#     & TYPO_NATIONALE_APCA_NIV3 == "IV.2" 
+#     & TYPO_NATIONALE_APCA_NIV4 == "IV.2.B" 
+#     & TYPO_NATIONALE_APCA_NIV5 == "IV.2.B.ne1" 
+#     & TYPO_NATIONALE_APCA_NIV6 == "Exploitation_non_affectée_niv6" 
+#     & (CULTSUR_GC / ELEVQ_501) >= 17
+#     ~ "IV.2.B.ne1.z4",
+#     
+#     TRUE  ~  (TYPO_NATIONALE_APCA_NIV6)))
+
+####IV.2.B.ne2.Naisseurs engraisseurs partiel
+
+
+DONNEES_BASE<-DONNEES_BASE %<>% 
+  mutate(TYPO_NATIONALE_APCA_NIV5=ifelse(TYPO_NATIONALE_APCA_NIV4=="IV.2.B" 
+                                         & TYPO_NATIONALE_APCA_NIV5=="Exploitation_non_affectée_niv5" 
+                                         & (ELEVQ_514> 2*ELEVQ_501 
+                                            & ELEVQ_514<= 4*ELEVQ_501),
+                                         "IV.2.B.ne2",
+                                         TYPO_NATIONALE_APCA_NIV5))
+
+####IV.2.B.ne2.z1.Lien au sol faible
+
+# DONNEES_BASE <- DONNEES_BASE %>%
+#   mutate(TYPO_NATIONALE_APCA_NIV6 = case_when(
+#     TYPO_NATIONALE_APCA_NIV1_AN == "Sous base III IV" 
+#     & TYPO_NATIONALE_APCA_NIV2 == "IV"
+#     & TYPO_NATIONALE_APCA_NIV3 == "IV.2" 
+#     & TYPO_NATIONALE_APCA_NIV4 == "IV.2.B"
+#     & TYPO_NATIONALE_APCA_NIV5 == "IV.2.B.ne2" 
+#     & TYPO_NATIONALE_APCA_NIV6 == "Exploitation_non_affectée_niv6"
+#     & (CULTSUR_GC / ELEVQ_501) < 30
+#     ~  "IV.2.B.ne2.z1",
+#     
+#     TRUE    ~ (TYPO_NATIONALE_APCA_NIV6)))
+
+####IV.2.B.ne2.z2.Compromis entre épandage et alimentaire
+
+# DONNEES_BASE <- DONNEES_BASE %>%
+#   mutate(TYPO_NATIONALE_APCA_NIV6 = case_when(
+#     TYPO_NATIONALE_APCA_NIV1_AN == "Sous base III IV" 
+#     & TYPO_NATIONALE_APCA_NIV2 == "IV"
+#     & TYPO_NATIONALE_APCA_NIV3 == "IV.2" 
+#     & TYPO_NATIONALE_APCA_NIV4 == "IV.2.B"
+#     & TYPO_NATIONALE_APCA_NIV5 == "IV.2.B.ne2" 
+#     & TYPO_NATIONALE_APCA_NIV6 == "Exploitation_non_affectée_niv6"
+#     & (CULTSUR_GC / ELEVQ_501) >= 30 
+#     & (CULTSUR_GC / ELEVQ_501) < 49
+#     ~  "IV.2.B.ne2.z2",
+#     
+#     TRUE      ~  (TYPO_NATIONALE_APCA_NIV6)))
+
+####IV.2.B.ne2.z3.Autonomie d'épandage sans autonomie alimentaire
+
+# DONNEES_BASE <- DONNEES_BASE %>%
+#   mutate(TYPO_NATIONALE_APCA_NIV6 = case_when(
+#     TYPO_NATIONALE_APCA_NIV1_AN == "Sous base III IV" 
+#     & TYPO_NATIONALE_APCA_NIV2 == "IV" 
+#     & TYPO_NATIONALE_APCA_NIV3 == "IV.2" 
+#     & TYPO_NATIONALE_APCA_NIV4 == "IV.2.B" 
+#     & TYPO_NATIONALE_APCA_NIV5 == "IV.2.B.ne2" 
+#     & TYPO_NATIONALE_APCA_NIV6 == "Exploitation_non_affectée_niv6"
+#     & ( CULTSUR_GC / ELEVQ_501) >= 49 
+#     & (CULTSUR_GC / ELEVQ_501) < 58
+#     ~ "IV.2.B.ne2.z3",
+#     
+#     TRUE    ~ (TYPO_NATIONALE_APCA_NIV6)))
+
+####IV.2.B.ne2.z4.Autonomie d'épandage et autonomie alimentaire
+
+# DONNEES_BASE <- DONNEES_BASE %>%
+#   mutate(TYPO_NATIONALE_APCA_NIV6 = case_when(
+#     TYPO_NATIONALE_APCA_NIV1_AN == "Sous base III IV" 
+#     & TYPO_NATIONALE_APCA_NIV2 == "IV"
+#     & TYPO_NATIONALE_APCA_NIV3 == "IV.2" 
+#     & TYPO_NATIONALE_APCA_NIV4 == "IV.2.B"
+#     & TYPO_NATIONALE_APCA_NIV5 == "IV.2.B.ne2" 
+#     & TYPO_NATIONALE_APCA_NIV6 == "Exploitation_non_affectée_niv6"
+#     & ( CULTSUR_GC/ ELEVQ_501) >= 58
+#     ~  "IV.2.B.ne2.z4",
+#     
+#     TRUE      ~  (TYPO_NATIONALE_APCA_NIV6)))
+
+####IV.2.B.ne3.Naisseurs engraisseurs
+
+DONNEES_BASE <- DONNEES_BASE %>%
+  mutate(TYPO_NATIONALE_APCA_NIV5 = ifelse((
+    TYPO_NATIONALE_APCA_NIV4 == "IV.2.B"
+    & TYPO_NATIONALE_APCA_NIV5 == "Exploitation_non_affectée_niv5"
+    & ( ELEVQ_514 > (4* ELEVQ_501)) 
+    & (ELEVQ_514  <= (10* ELEVQ_501))),
+    "IV.2.B.ne3",
+    TYPO_NATIONALE_APCA_NIV5))
+
+####IV.2.B.ne3.z1.Lien au sol faible
+
+# DONNEES_BASE <- DONNEES_BASE %>%
+#   mutate(TYPO_NATIONALE_APCA_NIV6 = case_when(
+#     TYPO_NATIONALE_APCA_NIV1_AN == "Sous base III IV" 
+#     & TYPO_NATIONALE_APCA_NIV2 == "IV"
+#     & TYPO_NATIONALE_APCA_NIV3 == "IV.2" 
+#     & TYPO_NATIONALE_APCA_NIV4 == "IV.2.B"
+#     & TYPO_NATIONALE_APCA_NIV5 == "IV.2.B.ne3" 
+#     & TYPO_NATIONALE_APCA_NIV6 == "Exploitation_non_affectée_niv6"
+#     & ( CULTSUR_GC / ELEVQ_501) < 50
+#     ~  "IV.2.B.ne3.z1",
+#     
+#     TRUE  ~  (TYPO_NATIONALE_APCA_NIV6)))
+
+####IV.2.B. ne3.z2.Compromis entre épandage et alimentaire
+
+# DONNEES_BASE <- DONNEES_BASE %>%
+#   mutate(TYPO_NATIONALE_APCA_NIV6 = case_when(
+#     TYPO_NATIONALE_APCA_NIV1_AN == "Sous base III IV" 
+#     & TYPO_NATIONALE_APCA_NIV2 == "IV"
+#     & TYPO_NATIONALE_APCA_NIV3 == "IV.2" 
+#     & TYPO_NATIONALE_APCA_NIV4 == "IV.2.B"
+#     & TYPO_NATIONALE_APCA_NIV5 == "IV.2.B.ne3" 
+#     & TYPO_NATIONALE_APCA_NIV6 == "Exploitation_non_affectée_niv6"
+#     & ( CULTSUR_GC /  ELEVQ_501) >= 50 
+#     & (CULTSUR_GC / ELEVQ_501) < 83
+#     ~  "IV.2.B.ne3.z2",
+#     
+#     TRUE    ~  (TYPO_NATIONALE_APCA_NIV6)))
+
+####IV.2.B. ne3.z3.Autonomie d'épandage sans autonomie alimentaire
+# 
+# DONNEES_BASE <- DONNEES_BASE %>% 
+#   mutate(TYPO_NATIONALE_APCA_NIV6 = case_when(
+#     TYPO_NATIONALE_APCA_NIV1_AN == "Sous base III IV" 
+#     & TYPO_NATIONALE_APCA_NIV2 == "IV"
+#     & TYPO_NATIONALE_APCA_NIV3 == "IV.2" 
+#     & TYPO_NATIONALE_APCA_NIV4 == "IV.2.B"
+#     & TYPO_NATIONALE_APCA_NIV5 == "IV.2.B.ne3" 
+#     & TYPO_NATIONALE_APCA_NIV6 == "Exploitation_non_affectée_niv6"
+#     & ( CULTSUR_GC / ELEVQ_501) >= 83 
+#     & (CULTSUR_GC / ELEVQ_501) < 100
+#     ~  "IV.2.B.ne3.z3",
+#     
+#     TRUE    ~ (TYPO_NATIONALE_APCA_NIV6)))
+
+####IV.2.B. ne3.z4.Autonomie d'épandage et autonomie alimentaire
+
+# DONNEES_BASE <- DONNEES_BASE %>% 
+#   mutate( TYPO_NATIONALE_APCA_NIV6 = case_when(
+#     TYPO_NATIONALE_APCA_NIV1_AN == "Sous base III IV" 
+#     & TYPO_NATIONALE_APCA_NIV2 == "IV"
+#     & TYPO_NATIONALE_APCA_NIV3 == "IV.2" 
+#     & TYPO_NATIONALE_APCA_NIV4 == "IV.2.B"
+#     & TYPO_NATIONALE_APCA_NIV5 == "IV.2.B.ne3" 
+#     & TYPO_NATIONALE_APCA_NIV6 == "Exploitation_non_affectée_niv6"
+#     & (CULTSUR_GC / ELEVQ_501) >= 100
+#     ~  "IV.2.B.ne3.z4",
+#     
+#     TRUE    ~ (TYPO_NATIONALE_APCA_NIV6)))
+
+####IV.2.B.ne4.Engraisseurs
+DONNEES_BASE <- DONNEES_BASE %>% 
+  mutate(TYPO_NATIONALE_APCA_NIV5 = ifelse((
+    TYPO_NATIONALE_APCA_NIV1_AN == "Sous base III IV" 
+    & TYPO_NATIONALE_APCA_NIV2 == "IV" 
+    & TYPO_NATIONALE_APCA_NIV3 == "IV.2" 
+    & TYPO_NATIONALE_APCA_NIV4 == "IV.2.B"
+    & TYPO_NATIONALE_APCA_NIV5 == "Exploitation_non_affectée_niv5"
+    &  (ELEVQ_501== 0 | ELEVQ_501 > 10)),
+    "IV.2.B.ne4",
+    TYPO_NATIONALE_APCA_NIV5))
+
+####IV.2.B. ne4.z1.Lien au sol faible
+
+# DONNEES_BASE <- DONNEES_BASE %>%
+#   mutate(TYPO_NATIONALE_APCA_NIV6 = case_when(
+#     TYPO_NATIONALE_APCA_NIV1_AN == "Sous base III IV" 
+#     & TYPO_NATIONALE_APCA_NIV2 == "IV"
+#     & TYPO_NATIONALE_APCA_NIV3 == "IV.2" 
+#     & TYPO_NATIONALE_APCA_NIV4 == "IV.2.B"
+#     & TYPO_NATIONALE_APCA_NIV5 == "IV.2.B.ne4" 
+#     & TYPO_NATIONALE_APCA_NIV6 == "Exploitation_non_affectée_niv6"
+#     & (CULTSUR_GC / (ELEVQ_509 + ELEVQ_514)) < 6.4
+#     ~  "IV.2.B.ne4.z1",
+#     
+#     TRUE  ~ (TYPO_NATIONALE_APCA_NIV6)))
+
+####IV.2.B. ne4.z2.Compromis entre épandage et alimentaire
+
+# DONNEES_BASE <- DONNEES_BASE %>% 
+#   mutate(TYPO_NATIONALE_APCA_NIV6 = case_when(
+#     TYPO_NATIONALE_APCA_NIV1_AN == "Sous base III IV" 
+#     & TYPO_NATIONALE_APCA_NIV2 == "IV"
+#     & TYPO_NATIONALE_APCA_NIV3 == "IV.2" 
+#     & TYPO_NATIONALE_APCA_NIV4 == "IV.2.B"
+#     & TYPO_NATIONALE_APCA_NIV5 == "IV.2.B.ne4" 
+#     & (CULTSUR_GC /(ELEVQ_509 + ELEVQ_514)) >= 6.4
+#     & (CULTSUR_GC /( ELEVQ_509 + ELEVQ_514)) < 9.6
+#     ~  "IV.2.B.ne4.z2",
+#     
+#     TRUE    ~ (TYPO_NATIONALE_APCA_NIV6)))
+
+####IV.2.B. ne4.z3.Autonomie d'épandage sans autonomie alimentaire
+
+# DONNEES_BASE <- DONNEES_BASE %>%
+#   mutate(TYPO_NATIONALE_APCA_NIV6 = case_when(
+#     TYPO_NATIONALE_APCA_NIV1_AN == "Sous base III IV" 
+#     & TYPO_NATIONALE_APCA_NIV2 == "IV"
+#     & TYPO_NATIONALE_APCA_NIV3 == "IV.2" 
+#     & TYPO_NATIONALE_APCA_NIV4 == "IV.2.B"
+#     & TYPO_NATIONALE_APCA_NIV5 == "IV.2.B.ne4" 
+#     & TYPO_NATIONALE_APCA_NIV6 == "Exploitation_non_affectée_niv6"
+#     & (CULTSUR_GC / (ELEVQ_509 + ELEVQ_514)) >= 9.6
+#     & (CULTSUR_GC / (ELEVQ_509 + ELEVQ_514)) < 12.8
+#     ~  "IV.2.B.ne4.z3",
+#     
+#     TRUE      ~ (TYPO_NATIONALE_APCA_NIV6)))
+
+###"IV.2.B. ne4.z4.Autonomie d'épandage et autonomie alimentaire
+
+# DONNEES_BASE <- DONNEES_BASE %>%
+#   mutate (TYPO_NATIONALE_APCA_NIV6 = case_when(
+#     TYPO_NATIONALE_APCA_NIV1_AN == "Sous base III IV" 
+#     & TYPO_NATIONALE_APCA_NIV2 == "IV"
+#     & TYPO_NATIONALE_APCA_NIV3 == "IV.2" 
+#     & TYPO_NATIONALE_APCA_NIV4 == "IV.2.B"
+#     & TYPO_NATIONALE_APCA_NIV5 == "IV.2.B.ne4" 
+#     & TYPO_NATIONALE_APCA_NIV6 == "Exploitation_non_affectée_niv6"
+#     & ( CULTSUR_GC / ( ELEVQ_509 + ELEVQ_514)) >= 12.8
+#     ~  "IV.2.B.ne4.z4",
+#     
+#     TRUE      ~  (TYPO_NATIONALE_APCA_NIV6)))
+
+####IV.2.C. Exploitations spécialisées cunicole
+
+DONNEES_BASE <- DONNEES_BASE %>% 
+  mutate(TYPO_NATIONALE_APCA_NIV4 = ifelse((
+    TYPO_NATIONALE_APCA_NIV3 == "IV.2" 
+    & TYPO_NATIONALE_APCA_NIV4 == "Exploitation_non_affectée_niv4"
+    & ( pb80  >= 0.66* pbsGRANIV)),
+    "IV.2.C",
+    TYPO_NATIONALE_APCA_NIV4))
+
+####IV.2.D.Exploitations mixtes
+
+DONNEES_BASE <- DONNEES_BASE %>%
+  mutate(TYPO_NATIONALE_APCA_NIV4 =ifelse(TYPO_NATIONALE_APCA_NIV3=="IV.2" 
+                                          & TYPO_NATIONALE_APCA_NIV4=="Exploitation_non_affectée_niv4" 
+                                          & (pbsVOL < 0.66* pbsGRANIV 
+                                             & pbsPORC < 0.66* pbsGRANIV 
+                                             & pb80 < 0.66* pbsGRANIV ),
+                                          "IV.2.D",
+                                          TYPO_NATIONALE_APCA_NIV4))
+
+
+
+####Modification, report des fins de branches par niveaux
+
+
+#NIVEAU 2
+DONNEES_BASE<-DONNEES_BASE%>%
+  mutate(TYPO_NATIONALE_APCA_NIV2=ifelse(TYPO_NATIONALE_APCA_NIV1=="0",
+                                         "0",
+                                         TYPO_NATIONALE_APCA_NIV2))
+
+#NIVEAU 3
+
+DONNEES_BASE<-DONNEES_BASE%>%
+  mutate(TYPO_NATIONALE_APCA_NIV3=ifelse(TYPO_NATIONALE_APCA_NIV2 %in% c("0","I.1","I.2","I.3","V"),
+                                         TYPO_NATIONALE_APCA_NIV2,
+                                         TYPO_NATIONALE_APCA_NIV3))
+
+
+#NIVEAU 4
+
+DONNEES_BASE<-DONNEES_BASE%>%
+  mutate(TYPO_NATIONALE_APCA_NIV4=ifelse(TYPO_NATIONALE_APCA_NIV3 %in% c("0","I.1","I.2","I.3","II.3","IV.1","V","Exploitation_non_affectée_niv3"),
+                                         TYPO_NATIONALE_APCA_NIV3,
+                                         TYPO_NATIONALE_APCA_NIV4))
+
+#NIVEAU 5
+
+DONNEES_BASE<-DONNEES_BASE%>%
+  mutate(TYPO_NATIONALE_APCA_NIV5=ifelse(TYPO_NATIONALE_APCA_NIV4 %in% c("0","I.1","I.2","I.3","II.1.C","II.1.D","II.2.E","II.3","IV.2.C","IV.2.D","IV.1","V","Exploitation_non_affectée_niv3"),
+                                         TYPO_NATIONALE_APCA_NIV4,
+                                         TYPO_NATIONALE_APCA_NIV5))
+
+#NIVEAU 6
+
+DONNEES_BASE<-DONNEES_BASE%>%
+  mutate(TYPO_NATIONALE_APCA_NIV6=ifelse(TYPO_NATIONALE_APCA_NIV3 %in% c("0","I.1","I.2","I.3","II.1","II.2","II.3","IV.2","IV.1","V","Exploitation_non_affectée_niv3")
+                                         |TYPO_NATIONALE_APCA_NIV5%in% c("Exploitation_non_affectée_niv5","III.1.A.a","III.1.A.b","III.2.A.a","III.2.A.b","III.2.B.a"),
+                                         TYPO_NATIONALE_APCA_NIV5,
+                                         TYPO_NATIONALE_APCA_NIV6))
+
+#NIVEAU 7
+
+
+DONNEES_BASE<-DONNEES_BASE%>%
+  mutate(TYPO_NATIONALE_APCA_NIV7=ifelse(TYPO_NATIONALE_APCA_NIV3 %in% c("0","I.1","I.2","I.3","II.1","II.2","II.3","IV.2","IV.1","V","Exploitation_non_affectée_niv3")
+                                         |TYPO_NATIONALE_APCA_NIV5%in% c("Exploitation_non_affectée_niv5","III.1.A.a","III.1.A.b","III.1.B.b","III.2.A.a","III.2.A.b","III.2.B.a")
+                                         |TYPO_NATIONALE_APCA_NIV6%in% c("III.1.B.a.ii","III.1.B.a.iii","III.2.B.b.iv"),
+                                         TYPO_NATIONALE_APCA_NIV6,
+                                         TYPO_NATIONALE_APCA_NIV7))
+
+############################# Sauvegarde de la typologie ##################
+
+####Sauvegarde de la base TYPO 2010 
+saveRDS(DONNEES_BASE, file = "DONNEES_2N_TYPO.rds")
+
+############################# Fin de la typologie ##################
+
+
+
 
